@@ -43,7 +43,7 @@ class Client:
         output :  - type : dict
 
         """
-        print("Downloading annotations of project {} ...".format(token))
+        print("Downloading annotations of project {} ...".format(self.token))
         to_send = {"token": self.token, "type": option}
         r = requests.get(self.host + 'annotations', data=json.dumps(to_send))
 
@@ -94,7 +94,6 @@ class Client:
 
         with open(self.label_path, "w+") as labelmap_file:
             for k, category in enumerate(categories):
-                k += 1
                 name = category["name"]
                 labelmap_file.write("item {\n\tname: \"" + name + "\"" + "\n\tid: " + str(k + 1) + "\n}\n")
             labelmap_file.close()
@@ -113,8 +112,7 @@ class Client:
             print(r.text)
             return False
         self.uploadId = r.json()["upload_id"]
-        print(self.uploadId)
-        return self.uploadId
+
 
     def _get_url_for_part(self, no_part):
         """
@@ -182,7 +180,6 @@ class Client:
         Method used to send h5 file to Picsell.ia backend
         """
         print("Initializing connection to our cloud")
-        uploadId = self._init_multipart()
         max_size = 5 * 1024 * 1024
         urls = []
         file_size = os.path.getsize(path_h5)
@@ -226,10 +223,12 @@ class Client:
             print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
             print("------------------------------------------")
 
-    def tf_vars_generator(self):
+    def tf_vars_generator(self, label_map):
         """
 
         Generator for variable needed to instantiate a tf example needed for training.
+
+        input : label_map
         :return: (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                    encoded_jpg, image_format, classes_text, classes, masks)
         """
