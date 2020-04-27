@@ -8,7 +8,7 @@ setup(
   author = 'Thibaut Lucas CEO @ Picsell.ia',                   # Type in your name
   author_email = 'thibaut@picsellia.com',      # Type in your E-Mail
   url = 'https://www.picsellia.com',   # Provide either the link to your github or to your website
-  download_url = '',    # I explain this later on
+  download_url = 'https://github.com/Picsell-ia/picsellia-sdk/archive/v0.1.tar.gz',    # I explain this later on
   keywords = ['SDK', 'Picsell.ia', 'Computer Vision', 'Deep Learing'],   # Keywords that define your package best
   install_requires=[            # I get to this in a second
           'cv2',
