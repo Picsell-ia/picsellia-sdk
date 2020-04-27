@@ -11,7 +11,7 @@ setup(
   download_url = 'https://github.com/Picsell-ia/picsellia-sdk/archive/v0.1.tar.gz',    # I explain this later on
   keywords = ['SDK', 'Picsell.ia', 'Computer Vision', 'Deep Learing'],   # Keywords that define your package best
   install_requires=[            # I get to this in a second
-          'cv2',
+          'python-opencv',
           'io',
           'json',
           'requests',
