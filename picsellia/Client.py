@@ -1,7 +1,6 @@
 import cv2
 import io
 import json
-import logging
 import os
 import requests
 import time
