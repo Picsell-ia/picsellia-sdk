@@ -7,6 +7,8 @@ import time
 from PIL import Image, ImageDraw
 from progressbar import ProgressBar
 import numpy as np
+import cvxpy
+
 class Client:
 
     def __init__(self, token, host="http://127.0.0.1:8000/sdk/"):
@@ -21,17 +23,43 @@ class Client:
         self.token = token
         self.dict_annotations = {}
         self.base_dir = "{}/".format(self.token)
-        self.png_dir = self.base_dir + "PNG_images/"
+        self.png_dir = self.base_dir + "images/"
+
+        self.png_dir_train = self.base_dir + "images/train/"
+        self.png_dir_valid = self.base_dir + "images/valid/"
+
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
+        self.record_dir = self.base_dir + 'records/'
+        self.config_dir = self.base_dir + 'config/'
+
         if not os.path.isdir(self.base_dir):
             print("Creating directory for project {}".format(self.base_dir))
             os.mkdir(self.base_dir)
+
         if not os.path.isdir(self.png_dir):
-            print("Creating directory for PNG Images or project {}".format(self.base_dir))
+            print("Creating directory for PNG Images of project {}".format(self.base_dir))
             os.mkdir(self.png_dir)
+
+        if not os.path.isdir(self.png_dir_train):
+            print("Creating directory for train Images of project {}".format(self.base_dir))
+            os.mkdir(self.png_dir_train)
+
+        if not os.path.isdir(self.png_dir_valid):
+            print("Creating directory for valid Images of project {}".format(self.base_dir))
+            os.mkdir(self.png_dir_valid)
+
         if not os.path.isdir(self.checkpoint_dir):
             print("Creating directory for checkpoints project {}".format(self.base_dir))
             os.mkdir(self.checkpoint_dir)
+
+        if not os.path.isdir(self.record_dir):
+            print("Creating directory for records of project {}".format(self.base_dir))
+            os.mkdir(self.record_dir)
+
+        if not os.path.isdir(self.config_dir):
+            print("Creating directory for config of project {}".format(self.base_dir))
+            os.mkdir(self.config_dir)
+
 
     def dl_annotations(self, option="train"):
         """
@@ -54,7 +82,46 @@ class Client:
         print("Annotations pulled ...")
         self.dict_annotations = r.json()
 
-    def local_png_save(self):
+
+    def _train_valid_split(self, prop):
+
+        print("Splitting your data smartly to optimize object detection ...\n{} % will be used to train".format(prop*100))
+        final_mat = []
+        for img in self.dict_annotations['images']:
+            cnt = [0] * len(cate)
+            internal_picture_id = img["internal_picture_id"]
+            for ann in self.dict_annotations["annotations"]:
+                if internal_picture_id == ann["internal_picture_id"]:
+                    for an in ann['annotations']:
+                        idx = cate.index(an['label'])
+                        cnt[int(idx)]+=1
+            final_mat.append(cnt)
+
+        self.L = np.array(final_mat).T
+
+        train_total = np.array([sum(e) for e in L])
+        nc, n = L.shape
+        train_mins = prop*train_total
+        train_mins = train_mins.astype('int')
+
+        valid_mins = (1-prop)*train_total
+        valid_mins = valid_mins.astype('int')
+
+        x = cvxpy.Variable(n, boolean=True)
+        lr = cvxpy.Variable(nc, nonneg=True)
+        ur = cvxpy.Variable(nc, nonneg=True)
+
+        lb = (L @ x >= train_mins.T - lr)
+        ub = (L @ x <= (sum(L.T)-valid_mins).T + ur)
+        constraints = [lb, ub]
+
+        objective = (sum(lr)+sum(ur))**2
+        problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
+        problem.solve()
+        result = x.value
+        self.index_url = [int(round(i)) for i in result]
+
+    def local_pic_save(self, prop=0.8):
         """
         Call this method to retrieve all the images annotated
 
@@ -65,12 +132,19 @@ class Client:
         """
         pbar = ProgressBar()
         images_infos = self.dict_annotations["images"]
-
+        train_list = []
+        val_list = []
         print("Downloading PNG images to your machine ...")
         cnt = 0
+        self._train_valid_split(prop)
+        for info, idx in zip(images_infos, self.index_url):
+            if idx == 1:
+                pic_name = os.path.join(self.png_dir_train, info['external_picture_url'].split('.')[0] + '.png')
+                train_list.append(info['internal_picture_id'])
+            else:
+                pic_name = os.path.join(self.png_dir_valid, info['external_picture_url'].split('.')[0] + '.png')
+                val_list.append(info['internal_picture_id'])
 
-        for info in pbar(images_infos):
-            pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('.')[0] + '.png')
             if not os.path.isfile(pic_name):
                 img_data = requests.get(info["signed_url"]).content
                 with open(pic_name, 'wb') as handler:
@@ -79,6 +153,17 @@ class Client:
 
         print("{} files were already on your machine".format(len(images_infos) - cnt))
         print(" {} PNG images have been downloaded to your machine".format(cnt))
+
+        print("Sending repartition to Picsell.ia backend")
+
+        to_send = {"token": self.token, "train": {"train_list_id":train_list}, "val": {"val_list_id" :val_list}}
+        r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
+
+        if r.status_code != 201:
+            print(r.text)
+            return False
+
+        print("Repartition send ..")
 
     def generate_labelmap(self):
 
@@ -254,6 +339,7 @@ class Client:
             image_format = bytes(image_format.encode('utf8'))
             for a in self.dict_annotations["annotations"]:
                 if internal_picture_id == a["internal_picture_id"]:
+                    print("ok")
                     if "polygon" in a.keys():
                         geo = a["polygon"]["geometry"]
                         poly = []
