@@ -6,7 +6,7 @@ import requests
 import time
 from PIL import Image, ImageDraw
 from progressbar import ProgressBar
-
+import numpy as np
 class Client:
 
     def __init__(self, token, host="http://127.0.0.1:8000/sdk/"):
