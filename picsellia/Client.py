@@ -121,7 +121,7 @@ class Client:
         """
         images_infos = self.dict_annotations["images"]
         self.train_list = []
-        self.val_list = []
+        self.eval_list = []
         self.train_list_id = []
         self.eval_list_id = []
         print("Downloading PNG images to your machine ...")
@@ -133,7 +133,7 @@ class Client:
                 self.train_list.append(pic_name)
                 self.train_list_id.append(info["internal_picture_id"])
             else:
-                self.val_list.append(pic_name)
+                self.eval_list.append(pic_name)
                 self.eval_list_id.append(info["internal_picture_id"])
 
             if not os.path.isfile(pic_name):
@@ -150,7 +150,7 @@ class Client:
         print("Sending repartition to Picsell.ia backend")
 
         to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id},
-                   "val": {"val_list_id": self.eval_list_id}}
+                   "val": {"eval_list_id": self.eval_list_id}}
         r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
 
         if r.status_code != 201:
