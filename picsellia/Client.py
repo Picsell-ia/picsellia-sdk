@@ -334,7 +334,7 @@ class Client:
             image = Image.open(encoded_jpg_io)
             width, height = image.size
             filename = path.encode('utf8')
-            image_format = '{}'.filename.split('.')[-1]
+            image_format = '{}'.format(filename.split('.')[-1])
             image_format = bytes(image_format.encode('utf8'))
             for a in self.dict_annotations["annotations"]:
                 if internal_picture_id == a["internal_picture_id"]:
