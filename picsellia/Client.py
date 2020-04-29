@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 import cvxpy
 
+
 class Client:
 
     def __init__(self, token, host="http://127.0.0.1:8000/sdk/"):
@@ -17,15 +18,12 @@ class Client:
         r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
         if r.status_code == 400:
             print(r.text)
-            return
+            raise ValueError('Token is not ok.')
         print("Connection Established")
         self.token = token
         self.dict_annotations = {}
         self.base_dir = "{}/".format(self.token)
         self.png_dir = self.base_dir + "images/"
-
-        self.png_dir_train = self.base_dir + "images/train/"
-        self.png_dir_valid = self.base_dir + "images/valid/"
 
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
         self.record_dir = self.base_dir + 'records/'
@@ -39,14 +37,6 @@ class Client:
             print("Creating directory for PNG Images of project {}".format(self.base_dir))
             os.mkdir(self.png_dir)
 
-        if not os.path.isdir(self.png_dir_train):
-            print("Creating directory for train Images of project {}".format(self.base_dir))
-            os.mkdir(self.png_dir_train)
-
-        if not os.path.isdir(self.png_dir_valid):
-            print("Creating directory for valid Images of project {}".format(self.base_dir))
-            os.mkdir(self.png_dir_valid)
-
         if not os.path.isdir(self.checkpoint_dir):
             print("Creating directory for checkpoints project {}".format(self.base_dir))
             os.mkdir(self.checkpoint_dir)
@@ -58,7 +48,6 @@ class Client:
         if not os.path.isdir(self.config_dir):
             print("Creating directory for config of project {}".format(self.base_dir))
             os.mkdir(self.config_dir)
-
 
     def dl_annotations(self, option="train"):
         """
@@ -81,12 +70,11 @@ class Client:
         print("Annotations pulled ...")
         self.dict_annotations = r.json()
 
-
     def _train_valid_split(self, prop):
 
-        print("Splitting your data smartly to optimize object detection ...\n{} % will be used to train".format(prop*100))
         final_mat = []
         cate = [v["name"] for v in self.dict_annotations["categories"]]
+        print(cate)
         for img in self.dict_annotations['images']:
             cnt = [0] * len(cate)
             internal_picture_id = img["internal_picture_id"]
@@ -94,17 +82,17 @@ class Client:
                 if internal_picture_id == ann["internal_picture_id"]:
                     for an in ann['annotations']:
                         idx = cate.index(an['label'])
-                        cnt[int(idx)]+=1
+                        cnt[int(idx)] += 1
             final_mat.append(cnt)
 
         L = np.array(final_mat).T
-
+        print(L)
         train_total = np.array([sum(e) for e in L])
         nc, n = L.shape
-        train_mins = prop*train_total
+        train_mins = prop * train_total
         train_mins = train_mins.astype('int')
 
-        valid_mins = (1-prop)*train_total
+        valid_mins = (1 - prop) * train_total
         valid_mins = valid_mins.astype('int')
 
         x = cvxpy.Variable(n, boolean=True)
@@ -112,13 +100,14 @@ class Client:
         ur = cvxpy.Variable(nc, nonneg=True)
 
         lb = (L @ x >= train_mins.T - lr)
-        ub = (L @ x <= (sum(L.T)-valid_mins).T + ur)
+        ub = (L @ x <= (sum(L.T) - valid_mins).T + ur)
         constraints = [lb, ub]
 
-        objective = (sum(lr)+sum(ur))**2
+        objective = (sum(lr) + sum(ur)) ** 2
         problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
         problem.solve()
         result = x.value
+        print(result)
         self.index_url = [int(round(i)) for i in result]
 
     def local_pic_save(self, prop=0.8):
@@ -131,18 +120,21 @@ class Client:
 
         """
         images_infos = self.dict_annotations["images"]
-        train_list = []
-        val_list = []
+        self.train_list = []
+        self.val_list = []
+        self.train_list_id = []
+        self.eval_list_id = []
         print("Downloading PNG images to your machine ...")
         cnt = 0
         self._train_valid_split(prop)
         for info, idx in zip(images_infos, self.index_url):
+            pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('.')[0] + '.png')
             if idx == 1:
-                pic_name = os.path.join(self.png_dir_train, info['external_picture_url'].split('.')[0] + '.png')
-                train_list.append(info['internal_picture_id'])
+                self.train_list.append(pic_name)
+                self.train_list_id.append(info["internal_picture_id"])
             else:
-                pic_name = os.path.join(self.png_dir_valid, info['external_picture_url'].split('.')[0] + '.png')
-                val_list.append(info['internal_picture_id'])
+                self.val_list.append(pic_name)
+                self.eval_list_id.append(info["internal_picture_id"])
 
             if not os.path.isfile(pic_name):
                 img_data = requests.get(info["signed_url"]).content
@@ -150,12 +142,15 @@ class Client:
                     handler.write(img_data)
                 cnt += 1
 
+        print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
+                                                                                  len(self.eval_list_id)))
         print("{} files were already on your machine".format(len(images_infos) - cnt))
         print(" {} PNG images have been downloaded to your machine".format(cnt))
 
         print("Sending repartition to Picsell.ia backend")
 
-        to_send = {"token": self.token, "train": {"train_list_id":train_list}, "val": {"val_list_id" :val_list}}
+        to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id},
+                   "val": {"val_list_id": self.eval_list_id}}
         r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
 
         if r.status_code != 201:
@@ -172,7 +167,7 @@ class Client:
                 output :  save in token/label_map.pbtxt
 
         """
-        print("Generatin labelmap ...")
+        print("Generating labelmap ...")
         self.label_path = '{}/label_map.pbtxt'.format(self.token)
         categories = self.dict_annotations["categories"]
 
@@ -196,7 +191,6 @@ class Client:
             print(r.text)
             return False
         self.uploadId = r.json()["upload_id"]
-
 
     def _get_url_for_part(self, no_part):
         """
@@ -307,7 +301,7 @@ class Client:
             print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
             print("------------------------------------------")
 
-    def tf_vars_generator(self, label_map, pic_dir):
+    def tf_vars_generator(self, label_map, ensemble='train'):
         """
 
         Generator for variable needed to instantiate a tf example needed for training.
@@ -316,7 +310,14 @@ class Client:
         :return: (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                    encoded_jpg, image_format, classes_text, classes, masks)
         """
-        for idx in range(len(self.dict_annotations['images'])):
+        if ensemble == "train":
+            path_list = self.train_list
+            id_list = self.train_list_id
+        else:
+            path_list = self.eval_list
+            id_list = self.eval_list_id
+
+        for path, ID in zip(path_list, id_list):
             xmins = []
             xmaxs = []
             ymins = []
@@ -325,16 +326,15 @@ class Client:
             classes = []
             masks = []
 
-            external_picture_url = self.dict_annotations['images'][idx]["external_picture_url"]
-            internal_picture_id = self.dict_annotations['images'][idx]["internal_picture_id"]
+            internal_picture_id = ID
 
-            with open(os.path.join(pic_dir, external_picture_url), 'rb') as fid:
+            with open(path, 'rb') as fid:
                 encoded_jpg = fid.read()
             encoded_jpg_io = io.BytesIO(encoded_jpg)
             image = Image.open(encoded_jpg_io)
             width, height = image.size
-            filename = self.dict_annotations['images'][idx]["external_picture_url"].encode('utf8')
-            image_format = '{}'.format(self.dict_annotations['images'][idx]["external_picture_url"].split('.')[-1])
+            filename = path.encode('utf8')
+            image_format = '{}'.filename.split('.')[-1]
             image_format = bytes(image_format.encode('utf8'))
             for a in self.dict_annotations["annotations"]:
                 if internal_picture_id == a["internal_picture_id"]:
