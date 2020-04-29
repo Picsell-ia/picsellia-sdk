@@ -5,7 +5,6 @@ import os
 import requests
 import time
 from PIL import Image, ImageDraw
-from progressbar import ProgressBar
 import numpy as np
 import cvxpy
 
@@ -87,6 +86,7 @@ class Client:
 
         print("Splitting your data smartly to optimize object detection ...\n{} % will be used to train".format(prop*100))
         final_mat = []
+        cate = [v["name"] for v in self.dict_annotations["categories"]]
         for img in self.dict_annotations['images']:
             cnt = [0] * len(cate)
             internal_picture_id = img["internal_picture_id"]
@@ -97,7 +97,7 @@ class Client:
                         cnt[int(idx)]+=1
             final_mat.append(cnt)
 
-        self.L = np.array(final_mat).T
+        L = np.array(final_mat).T
 
         train_total = np.array([sum(e) for e in L])
         nc, n = L.shape
@@ -130,7 +130,6 @@ class Client:
         output :  - all png pictures uploaded to token/png_images/*.png
 
         """
-        pbar = ProgressBar()
         images_infos = self.dict_annotations["images"]
         train_list = []
         val_list = []
