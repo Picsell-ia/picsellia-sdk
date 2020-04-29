@@ -307,7 +307,7 @@ class Client:
             print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
             print("------------------------------------------")
 
-    def tf_vars_generator(self, label_map):
+    def tf_vars_generator(self, label_map, pic_dir):
         """
 
         Generator for variable needed to instantiate a tf example needed for training.
@@ -328,7 +328,7 @@ class Client:
             external_picture_url = self.dict_annotations['images'][idx]["external_picture_url"]
             internal_picture_id = self.dict_annotations['images'][idx]["internal_picture_id"]
 
-            with open(os.path.join(self.png_dir, external_picture_url), 'rb') as fid:
+            with open(os.path.join(pic_dir, external_picture_url), 'rb') as fid:
                 encoded_jpg = fid.read()
             encoded_jpg_io = io.BytesIO(encoded_jpg)
             image = Image.open(encoded_jpg_io)
