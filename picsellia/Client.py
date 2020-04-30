@@ -26,14 +26,17 @@ class Client:
         else:
             print("It's the training number {} for this project".format(self.training_id))
         self.dict_annotations = {}
-        self.base_dir = "{}/".format(self.token)
-        self.png_dir = self.base_dir + "images/"
+        self.base_dir = "{}/{}/".format(self.token, self.training_id)
+        self.png_dir = self.token + '/images/'
         self.log_dir = self.base_dir + "logs/"
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
         self.record_dir = self.base_dir + 'records/'
         self.config_dir = self.base_dir + 'config/'
         self.results_dir = self.base_dir + 'results/'
+        self.exported_model = self.base_dir + 'exported_model/'
 
+        if not os.path.isdir(self.token):
+            os.mkdir(self.token)
         if not os.path.isdir(self.base_dir):
             print("Creating directory for project {}".format(self.base_dir))
             os.mkdir(self.base_dir)
@@ -280,6 +283,31 @@ class Client:
         print("Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
 
 
+    def send_examples(self):
+
+        list_img = os.listdir(self.results_dir)
+        assert len(list_img) != 0, 'No example have been created'
+        object_name_list = []
+        for img_path in list_img:
+            OBJECT_NAME = os.path.join(self.results_dir, img_path)
+            to_send = {"token": self.token, "object_name": OBJECT_NAME}
+            r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
+            if r.status_code != 200:
+                print(r.text)
+                raise ValueError("Errors.")
+            response = r.json()["url"]
+            with open(OBJECT_NAME, 'rb') as f:
+                files = {'file': (OBJECT_NAME, f)}
+                http_response = requests.post(response['url'], data=response['fields'], files=files)
+            if http_response.status_code == 204:
+                object_name_list.append(OBJECT_NAME)
+
+        to_send2 = { "token": self.token, "training_id": self.training_id, "urls": object_name_list }
+        r = requests.post(self.host + 'post_preview', data=json.dumps(to_send2))
+        if r.status_code != 201:
+            print(r.text)
+            raise ValueError("Errors.")
+        print("A snapshot of results has been saved to the platform")
 
     def send_weights(self, path_h5):
 
@@ -398,3 +426,7 @@ class Client:
                    encoded_jpg, image_format, classes_text, classes, masks)
 
 
+
+if __name__ == '__main__':
+    client = Client(token ="3a6c59f5-0d7e-4189-ac50-e0a31140ac1e")
+    client.send_examples()
