@@ -1,12 +1,12 @@
 import cv2
+import cvxpy
 import io
 import json
+import numpy as np
 import os
 import requests
 import time
 from PIL import Image, ImageDraw
-import numpy as np
-import cvxpy
 
 
 class Client:
@@ -17,17 +17,22 @@ class Client:
         self.host = host
         r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
         if r.status_code == 400:
-            print(r.text)
             raise ValueError('Token is not ok.')
         print("Connection Established")
         self.token = token
+        self.training_id = r.json()["training_id"]
+        if self.training_id == 0:
+            print("It's your first training for this project")
+        else:
+            print("It's the training number {} for this project".format(self.training_id))
         self.dict_annotations = {}
         self.base_dir = "{}/".format(self.token)
         self.png_dir = self.base_dir + "images/"
-
+        self.log_dir = self.base_dir + "logs/"
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
         self.record_dir = self.base_dir + 'records/'
         self.config_dir = self.base_dir + 'config/'
+        self.results_dir = self.base_dir + 'results/'
 
         if not os.path.isdir(self.base_dir):
             print("Creating directory for project {}".format(self.base_dir))
@@ -41,6 +46,10 @@ class Client:
             print("Creating directory for checkpoints project {}".format(self.base_dir))
             os.mkdir(self.checkpoint_dir)
 
+        if not os.path.isdir(self.log_dir):
+            print("Creating directory for logs of project {}".format(self.log_dir))
+            os.mkdir(self.log_dir)
+
         if not os.path.isdir(self.record_dir):
             print("Creating directory for records of project {}".format(self.base_dir))
             os.mkdir(self.record_dir)
@@ -48,6 +57,10 @@ class Client:
         if not os.path.isdir(self.config_dir):
             print("Creating directory for config of project {}".format(self.base_dir))
             os.mkdir(self.config_dir)
+
+        if not os.path.isdir(self.results_dir):
+            print("Creating directory for results of project {}".format(self.results_dir))
+            os.mkdir(self.results_dir)
 
     def dl_annotations(self, option="train"):
         """
@@ -251,6 +264,23 @@ class Client:
 
         print("Weights pulled to your machine ...")
 
+    def send_logs(self, logs):
+        """
+        Method to send training logs to Picsell.ia platform,
+
+        input: logs -> dict :: all_the_infos contained in tf_events that you want to be displayed on your Dashboard.
+        """
+
+        to_send = {"token": self.token, "training_id": self.training_id, "logs": logs}
+        r = requests.post(self.host + 'post_logs', data=json.dumps(to_send))
+        if r.status_code != 201:
+            print(r.text)
+            raise ValueError("The logs have not been send.")
+
+        print("Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
+
+
+
     def send_weights(self, path_h5):
 
         """
@@ -366,3 +396,5 @@ class Client:
 
             yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                    encoded_jpg, image_format, classes_text, classes, masks)
+
+
