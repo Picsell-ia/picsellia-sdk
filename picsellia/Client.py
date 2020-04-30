@@ -184,7 +184,7 @@ class Client:
 
         """
         print("Generating labelmap ...")
-        self.label_path = '{}/label_map.pbtxt'.format(self.token)
+        self.label_path = '{}/label_map.pbtxt'.format(self.base_dir)
         categories = self.dict_annotations["categories"]
 
         with open(self.label_path, "w+") as labelmap_file:
