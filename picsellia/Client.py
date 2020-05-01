@@ -334,8 +334,10 @@ class Client:
         print("Initializing connection to our cloud")
         max_size = 5 * 1024 * 1024
         urls = []
+        self._init_multipart()
         file_size = os.path.getsize(self.OBJECT_NAME)
         upload_by = int(file_size / max_size) + 1
+
         with open(self.OBJECT_NAME, 'rb') as f:
             for part in range(1, upload_by + 1):
                 signed_url = self._get_url_for_part(part)
