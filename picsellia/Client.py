@@ -200,7 +200,7 @@ class Client:
 
         """
         date = time.strftime("%Y%m%d-%H%M%S")
-        self.OBJECT_NAME = '{}/checkpoint/{}.h5'.format(self.token, date)  # Get the actual timestamp
+        self.OBJECT_NAME = '{}/exported_model/exported_model.pb'.format(self.exported_model)  # Get the actual timestamp
         to_send = {"object_name": self.OBJECT_NAME}
         r = requests.get(self.host + 'init_upload', data=json.dumps(to_send))
         if r.status_code != 200:
@@ -309,7 +309,7 @@ class Client:
             raise ValueError("Errors.")
         print("A snapshot of results has been saved to the platform")
 
-    def send_weights(self, path_h5):
+    def send_weights(self):
 
         """
         :arg path_h5 path to h5 file
@@ -320,7 +320,7 @@ class Client:
         urls = []
         file_size = os.path.getsize(path_h5)
         upload_by = int(file_size / max_size) + 1
-        with open(path_h5, 'rb') as f:
+        with open(self.exported_model+'saved_model/saved_model.pb', 'rb') as f:
             for part in range(1, upload_by + 1):
                 signed_url = self._get_url_for_part(part)
                 urls.append(signed_url)
@@ -335,7 +335,7 @@ class Client:
                 parts.append({'ETag': etag, 'PartNumber': part})
 
         if self._complete_part_upload(parts):
-            print("Your weights have been uploaded successfully to our cloud.")
+            print("Your exported model have been uploaded successfully to our cloud.")
         else:
             print("There has been an error during the upload of your h5 file,\nmaybe consider upolading it manually "
                   "on the platform.")
