@@ -334,9 +334,9 @@ class Client:
         print("Initializing connection to our cloud")
         max_size = 5 * 1024 * 1024
         urls = []
-        file_size = os.path.getsize(path_h5)
+        file_size = os.path.getsize(self.OBJECT_NAME)
         upload_by = int(file_size / max_size) + 1
-        with open(self.exported_model + 'saved_model/saved_model.pb', 'rb') as f:
+        with open(self.OBJECT_NAME, 'rb') as f:
             for part in range(1, upload_by + 1):
                 signed_url = self._get_url_for_part(part)
                 urls.append(signed_url)
