@@ -20,14 +20,25 @@ class Client:
             raise ValueError('Token is not ok.')
         print("Connection Established")
         self.token = token
+        self.project_id = r.json()["project_id"]
+
+    def init_model(self, model_name):
+        to_send = {"model_name": model_name, "token": self.token}
+        r = requests.get(self.host + 'init_model', data=json.dumps(to_send))
+        if r.status_code == 400:
+            raise ValueError('Token is not ok.')
+        print("Connection Established")
+
+        self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
+
         if self.training_id == 0:
             print("It's your first training for this project")
         else:
             print("It's the training number {} for this project".format(self.training_id))
         self.dict_annotations = {}
-        self.base_dir = "{}/{}/".format(self.token, self.training_id)
-        self.png_dir = self.token + '/images/'
+        self.base_dir = "{}/{}/{}/".format(self.project_id, self.network_id, self.training_id)
+        self.png_dir = self.project_id + '/images/'
         self.log_dir = self.base_dir + "logs/"
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
         self.record_dir = self.base_dir + 'records/'
@@ -35,8 +46,13 @@ class Client:
         self.results_dir = self.base_dir + 'results/'
         self.exported_model = self.base_dir + 'exported_model/'
 
-        if not os.path.isdir(self.token):
-            os.mkdir(self.token)
+        if not os.path.isdir(self.project_id):
+            print("First time using Picsell.ia on this project, initializing directories ...")
+            os.mkdir(self.project_id)
+
+        if not os.path.isdir(os.path.join(self.project_id, self.network_id)):
+            os.mkdir(os.path.join(self.project_id, self.network_id))
+
         if not os.path.isdir(self.base_dir):
             print("Creating directory for project {}".format(self.base_dir))
             os.mkdir(self.base_dir)
@@ -228,7 +244,7 @@ class Client:
         Hidden method used to complete the streamed upload of .h5
         """
         to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
-                   "upload_id": self.uploadId, "parts": parts}
+                   "upload_id": self.uploadId, "parts": parts, "network_id": self.network_id, "training_id": self.training_id}
 
         print(to_send)
         r = requests.get(self.host + 'complete_upload', data=json.dumps(to_send))
@@ -280,8 +296,8 @@ class Client:
             print(r.text)
             raise ValueError("The logs have not been send.")
 
-        print("Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
-
+        print(
+            "Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
 
     def send_examples(self):
 
@@ -302,7 +318,7 @@ class Client:
             if http_response.status_code == 204:
                 object_name_list.append(OBJECT_NAME)
 
-        to_send2 = { "token": self.token, "training_id": self.training_id, "urls": object_name_list }
+        to_send2 = {"token": self.token, "training_id": self.training_id, "urls": object_name_list}
         r = requests.post(self.host + 'post_preview', data=json.dumps(to_send2))
         if r.status_code != 201:
             print(r.text)
@@ -320,7 +336,7 @@ class Client:
         urls = []
         file_size = os.path.getsize(path_h5)
         upload_by = int(file_size / max_size) + 1
-        with open(self.exported_model+'saved_model/saved_model.pb', 'rb') as f:
+        with open(self.exported_model + 'saved_model/saved_model.pb', 'rb') as f:
             for part in range(1, upload_by + 1):
                 signed_url = self._get_url_for_part(part)
                 urls.append(signed_url)
@@ -426,7 +442,6 @@ class Client:
                    encoded_jpg, image_format, classes_text, classes, masks)
 
 
-
 if __name__ == '__main__':
-    client = Client(token ="3a6c59f5-0d7e-4189-ac50-e0a31140ac1e")
+    client = Client(token="3a6c59f5-0d7e-4189-ac50-e0a31140ac1e")
     client.send_examples()
