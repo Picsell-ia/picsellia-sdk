@@ -444,6 +444,98 @@ class Client:
                    encoded_jpg, image_format, classes_text, classes, masks)
 
 
+    def upload_annotations(self, annotations,format='picsellia'):
+
+        if not isinstance(format, str):
+            raise ValueError('format must be a string not {}'
+                .format(type(format)))
+
+        if format != 'picsellia':
+            if not isinstance(annotations, list):
+                raise ValueError('list of annotations in images must be a list not {}'
+                    .format(type(annotations)))
+
+            annotation_list = []
+            for i, image_dict in enumerate(annotations):
+                if not isinstance(image, dict):
+                    raise ValueError('annotations by image must be a dict not {}, in image n°{}'
+                        .format(type(image),i))
+
+                image = json.loads(image_dict)
+                image_annotations = []
+                if not isinstance(image["image_id"], str):
+                    raise ValueError('image_id must be a string not {}'
+                        .format(type(image["image_id"])))
+
+                if not isinstance(image["image_name"], str):
+                    raise ValueError('image_name must be a string not {}'
+                        .format(type(image["image_name"])))
+
+                for j,annotation_dict in enumerate(image["annotations"]):
+                    if not isinstance(annotation, list):
+                        raise ValueError('annotation must be a dict not {}, in annotation n°{}'
+                            .format(type(annotation),j))
+
+                    annotation = json.loads(annotation_dict)
+                    if not isinstance(annotation["coordinates"], list):
+                        raise ValueError('coordinates must be a list not {}, in annotation n°{}'
+                            .format(type(annotation["coordinates"]),j))
+
+                    if not isinstance(annotation["type"], str):
+                        raise ValueError('type of annotation must be a list not {}, in annotation n°{}'
+                            .format(type(annotation["type"]),j))
+
+                    if not isinstance(annotation["label"], str):
+                        raise ValueError('label of annotation must be a list not {}, in annotation n°{}'
+                            .format(type(annotation["label"]),j))
+
+                    annotation_json = {
+                        'type': annotation["type"],
+                        'label': annotation["label"],
+                    }
+
+                    if annotation["type"]=="polygon":
+                        geometry = annotation["coordinates"]
+                        annotation_json['polygon'] = {
+                            'geometry': geometry
+                        }
+
+                    image_annotations.append(annotation_json)
+
+                image_json = {
+                    'image_id': image["image_id"],
+                    'image_name': image["image_name"],
+                    'nb_labels': len(image_annotations),
+                    'annotations': image_annotations
+                }
+
+                try:
+                    image_json["is_accepted"] = image["is_accepted"]
+                except:
+                    pass
+                try:
+                    image_json["is_reviewed"] = image["is_reviewed"]
+                except:
+                    pass
+                annotation_list.append(image_json)
+        else:
+            if not isinstance(annotations, dict):
+                raise ValueError('Picsellia annotations are a dict not {}'
+                    .format(type(annotations)))
+            annotation_json = json.loads(annotations)
+            annotation_list = annotation_json["annotations"]
+
+        to_send = {
+            "token": self.token,
+            'format': format,
+            'annotations': annotation_list
+        }
+        r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send))
+        if r.status_code != 201:
+            print(r.text)
+            raise ValueError("Errors.")
+        print("Your annotations has been uploaded, you can now see them in the platform")
+
 if __name__ == '__main__':
     client = Client(token="3a6c59f5-0d7e-4189-ac50-e0a31140ac1e")
     client.send_examples()
