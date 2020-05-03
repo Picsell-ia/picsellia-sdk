@@ -142,6 +142,29 @@ class Client:
         print(result)
         self.index_url = [int(round(i)) for i in result]
 
+    def _get_and_send_labels_repartition(self):
+
+        cate = [v["name"] for v in self.dict_annotations["categories"]]
+        cnt_train = [0] * len(cate)
+        cnt_eval = [0] * len(cate)
+
+        for img, index in zip(self.dict_annotations['images'], self.index_url):
+
+            internal_picture_id = img["internal_picture_id"]
+            for ann in self.dict_annotations["annotations"]:
+                if internal_picture_id == ann["internal_picture_id"]:
+                    for an in ann['annotations']:
+                        idx = cate.index(an['label'])
+                        if index == 1:
+                            cnt_train[int(idx)] += 1
+                        else:
+                            cnt_eval[int(idx)] += 1
+
+        return cnt_train, cnt_eval, cate
+
+
+
+
     def local_pic_save(self, prop=0.8):
         """
         Call this method to retrieve all the images annotated
@@ -181,10 +204,13 @@ class Client:
 
         print("Sending repartition to Picsell.ia backend")
 
-        to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id},
-                   "val": {"eval_list_id": self.eval_list_id}}
+        label_train, label_test, cate = self._get_and_send_labels_repartition()
+        print(cate)
+        print(label_test)
+        print(label_train)
+        to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
+                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate}}
         r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
-
         if r.status_code != 201:
             print(r.text)
             return False
@@ -216,7 +242,7 @@ class Client:
 
         """
         date = time.strftime("%Y%m%d-%H%M%S")
-        self.OBJECT_NAME = '{}/exported_model/exported_model.pb'.format(self.exported_model)  # Get the actual timestamp
+        self.OBJECT_NAME = '{}saved_model/saved_model.pb'.format(self.exported_model)  # Get the actual timestamp
         to_send = {"object_name": self.OBJECT_NAME}
         r = requests.get(self.host + 'init_upload', data=json.dumps(to_send))
         if r.status_code != 200:
@@ -231,7 +257,6 @@ class Client:
         """
         to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
                    "upload_id": self.uploadId, "part_no": no_part}
-        print(to_send)
         r = requests.get(self.host + 'get_post_url', data=json.dumps(to_send))
         if r.status_code != 200:
             print(r.text)
@@ -343,11 +368,14 @@ class Client:
                 signed_url = self._get_url_for_part(part)
                 urls.append(signed_url)
             parts = []
+            print(urls)
             for num, url in enumerate(urls):
+                print('*'*num)
                 part = num + 1
                 file_data = f.read(max_size)
                 res = requests.put(url, data=file_data)
                 if res.status_code != 200:
+                    print(res.text)
                     return
                 etag = res.headers['ETag']
                 parts.append({'ETag': etag, 'PartNumber': part})
@@ -538,4 +566,6 @@ class Client:
 
 if __name__ == '__main__':
     client = Client(token="3a6c59f5-0d7e-4189-ac50-e0a31140ac1e")
-    client.send_examples()
+    client.init_model("ok")
+    client.dl_annotations()
+    client.local_pic_save()
