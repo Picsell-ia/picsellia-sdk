@@ -324,23 +324,38 @@ class Client:
         print(
             "Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
 
-    def send_examples(self):
-
-        list_img = os.listdir(self.results_dir)
-        assert len(list_img) != 0, 'No example have been created'
+    def send_examples(self,id=None):
+        if id==None:
+            results_dir = self.results_dir
+            list_img = os.listdir(results_dir)
+            assert len(list_img) != 0, 'No example have been created'
+        else:
+            base_dir = '{}/{}/'.format(self.project_id,self.network_id)
+            if str(id) in os.listdir(base_dir):
+                results_dir = os.path.join(base_dir,str(id)+'/results')
+                list_img = os.listdir(results_dir)
+                assert len(list_img) != 0, 'No example have been created'
+            else:
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
+                    os.path.join(base_dir,str(id)+'/results'))
         object_name_list = []
         for img_path in list_img:
-            OBJECT_NAME = os.path.join(self.results_dir, img_path)
+            file_path = os.path.join(results_dir,img_path)
+            OBJECT_NAME = file_path
+            print(OBJECT_NAME)
             to_send = {"token": self.token, "object_name": OBJECT_NAME}
             r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
             if r.status_code != 200:
                 print(r.text)
                 raise ValueError("Errors.")
             response = r.json()["url"]
-            with open(OBJECT_NAME, 'rb') as f:
+            print('response:',response)
+            with open(file_path, 'rb') as f:
                 files = {'file': (OBJECT_NAME, f)}
-                http_response = requests.post(response['url'], data=response['fields'], files=files)
-            if http_response.status_code == 204:
+                headers = {'content-type': 'image/png'}
+                http_response = requests.put(response, data=f,headers=headers)
+                print('http:',http_response.status_code)
+            if http_response.status_code == 200:
                 object_name_list.append(OBJECT_NAME)
 
         to_send2 = {"token": self.token, "training_id": self.training_id, "urls": object_name_list}
