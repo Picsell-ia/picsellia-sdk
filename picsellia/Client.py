@@ -550,8 +550,7 @@ class Client:
             if not isinstance(annotations, dict):
                 raise ValueError('Picsellia annotations are a dict not {}'
                     .format(type(annotations)))
-            annotation_json = json.loads(annotations)
-            annotation_list = annotation_json["annotations"]
+            annotation_list = annotations["annotations"]
 
         to_send = {
             "token": self.token,
