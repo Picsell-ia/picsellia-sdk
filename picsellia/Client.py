@@ -316,7 +316,8 @@ class Client:
         input: logs -> dict :: all_the_infos contained in tf_events that you want to be displayed on your Dashboard.
         """
 
-        to_send = {"token": self.token, "training_id": self.training_id, "logs": logs}
+        to_send = {"token": self.token, "network_id": self.network_id,
+                   "training_id": self.training_id, "logs": logs}
         r = requests.post(self.host + 'post_logs', data=json.dumps(to_send))
         if r.status_code != 201:
             print(r.text)
@@ -359,7 +360,8 @@ class Client:
             if http_response.status_code == 200:
                 object_name_list.append(OBJECT_NAME)
 
-        to_send2 = {"token": self.token, "training_id": self.training_id, "urls": object_name_list}
+        to_send2 = {"token": self.token,"network_id": self.network_id,
+                    "training_id": self.training_id, "urls": object_name_list}
         r = requests.post(self.host + 'post_preview', data=json.dumps(to_send2))
         if r.status_code != 201:
             print(r.text)
