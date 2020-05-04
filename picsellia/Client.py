@@ -209,7 +209,8 @@ class Client:
         print(label_test)
         print(label_train)
         to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
-                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate}}
+                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
+                   "network_id": self.network_id,"training_id": self.training_id}
         r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
         if r.status_code != 201:
             print(r.text)
