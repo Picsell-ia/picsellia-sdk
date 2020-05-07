@@ -7,8 +7,7 @@ import os
 import requests
 import time
 from PIL import Image, ImageDraw
-from exceptions import *
-import logging
+from picsellia.exceptions import *
 
 
 class Client:
@@ -385,7 +384,7 @@ class Client:
 
         """
         print("Generating labelmap ...")
-        if not hasattr(self, "dict_annotations") or hasattr(self, "base_dir"):
+        if not hasattr(self, "dict_annotations") or not hasattr(self, "base_dir"):
             raise ResourceNotFoundError("Please init model and dl_annotation()")
 
         self.label_path = '{}/label_map.pbtxt'.format(self.base_dir)
@@ -440,7 +439,7 @@ class Client:
             NetworkError: If it impossible to initialize upload
 
         """
-        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "OBJECT_NAME") or hasattr(self, "uploadId"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME") or not hasattr(self, "uploadId"):
             raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
             to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
@@ -460,7 +459,7 @@ class Client:
             NetworkError: If it impossible to initialize upload
 
         """
-        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "OBJECT_NAME") or hasattr(self, "parts"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME") or not hasattr(self, "parts"):
             raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
             to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
@@ -515,7 +514,7 @@ class Client:
 
         """
 
-        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "host") or hasattr(self, "token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
 
         try:
@@ -611,7 +610,7 @@ class Client:
 
         """
 
-        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "host") or hasattr(self, "token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
         max_size = 5 * 1024 * 1024
         urls = []
@@ -665,7 +664,7 @@ class Client:
     #         print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
     #         print("------------------------------------------")
 
-    def tf_vars_generator(self, label_map, ensemble='train', annotations_type="polygon"):
+    def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
 
         Generator for variable needed to instantiate a tf example needed for training.
@@ -673,7 +672,7 @@ class Client:
         Args :
             label_map (tf format)
             ensemble (str) : Chose between train & test
-            annotations_type: "polygon" or "rectangle"
+            annotation_type: "polygon" or "rectangle"
 
         Returns :
             (width, height, xmins, xmaxs, ymins, ymaxs, filename,
@@ -684,6 +683,9 @@ class Client:
                                    If images can't be opened
 
         """
+
+        if annotation_type not in ["polygon", "rectangle"]:
+            raise InvalidQueryError("Please select a valid annotation_type")
 
         if ensemble == "train":
             path_list = self.train_list
@@ -711,10 +713,10 @@ class Client:
             filename = path.encode('utf8')
             image_format = '{}'.format(path.split('.')[-1])
             image_format = bytes(image_format.encode('utf8'))
-            
-            if annotations_type=="polygon":
+
+            if annotation_type=="polygon":
                 for a in self.dict_annotations["annotations"]:
-                    if internal_picture_id == a["internal_picture_id"]:                       
+                    if internal_picture_id == a["internal_picture_id"]:
                         if "polygon" in a.keys():
                             geo = a["polygon"]["geometry"]
                             poly = []
@@ -738,7 +740,11 @@ class Client:
                             classes_text.append(a["label"].encode("utf8"))
                             label_id = label_map[a["label"]]
                             classes.append(label_id)
-            if annotations_type=="rectangle":
+
+                yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
+                    encoded_jpg, image_format, classes_text, classes, masks)
+
+            elif annotation_type=="rectangle":
                 for a in self.dict_annotations["annotations"]:
                     if internal_picture_id==a["internal_picture_id"]:
                         if 'rectangle' in a.keys():
@@ -754,8 +760,8 @@ class Client:
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
 
-            yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                encoded_jpg, image_format, classes_text, classes, masks)
+                yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
+                    encoded_jpg, image_format, classes_text, classes)
 
     def upload_annotations(self, annotations,format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
