@@ -346,7 +346,9 @@ class Client:
         label_train, label_test, cate = self._get_and_send_labels_repartition_obj_detection()
 
         to_send = {"token": self.token, "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
-                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate}}
+                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
+                   "network_id": self.network_id,"training_id": self.training_id}
+
 
         try:
             r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send))
@@ -500,7 +502,7 @@ class Client:
         """
 
         try:
-            to_send = {"token": self.token, "training_id": self.training_id, "logs": logs}
+            to_send = {"token": self.token, "training_id": self.training_id, "logs": logs,  "network_id": self.network_id}
             r = requests.post(self.host + 'post_logs', data=json.dumps(to_send))
             if r.status_code != 201:
                 raise NetworkError("The logs have not been send because %s" %(r.text))
@@ -512,52 +514,67 @@ class Client:
             raise NetworkError("Could not connect to Picsell.ia Server")
 
 
-    def send_examples(self):
-        """Send visual results to Picsell.ia Platform
+    def send_examples(self,id=None):
+        """Send Visual results to Picsell.ia Platform
 
-
+        Args:
+            id (str): Id of the training
         Raises:
             NetworkError: If it impossible to initialize upload
-            ResourceNotFoundError: If no visual results saved in /project_id/network_id/training_id/results/
+            FileNotFoundError:
 
         """
-
-        list_img = os.listdir(self.results_dir)
-        if not len(list_img) != 0:
-            raise ResourceNotFoundError("No images in %s, please generate examples" %s (self.results_dir))
-
+        if id==None:
+            results_dir = self.results_dir
+            list_img = os.listdir(results_dir)
+            assert len(list_img) != 0, 'No example have been created'
+        else:
+            base_dir = '{}/{}/'.format(self.project_id,self.network_id)
+            if str(id) in os.listdir(base_dir):
+                results_dir = os.path.join(base_dir,str(id)+'/results')
+                list_img = os.listdir(results_dir)
+                assert len(list_img) != 0, 'No example have been created'
+            else:
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
+                    os.path.join(base_dir,str(id)+'/results'))
         object_name_list = []
         for img_path in list_img:
-            OBJECT_NAME = os.path.join(self.results_dir, img_path)
+            file_path = os.path.join(results_dir,img_path)
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError("Can't locate file @ %s" % (file_path))
+            OBJECT_NAME = file_path
             to_send = {"token": self.token, "object_name": OBJECT_NAME}
             try:
                 r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
                 if r.status_code != 200:
-                    logger.info(r.text)
+                    print(r.text)
                     raise ValueError("Errors.")
                 response = r.json()["url"]
+                print('response:',response)
             except:
-                raise NetworkError("Impossible to get a pre-signed url")
+                raise NetworkError("Could not get an url to post annotations")
 
             try:
-                with open(OBJECT_NAME, 'rb') as f:
+                with open(file_path, 'rb') as f:
                     files = {'file': (OBJECT_NAME, f)}
-                    http_response = requests.post(response['url'], data=response['fields'], files=files)
-                if http_response.status_code == 204:
+                    headers = {'content-type': 'image/png'}
+                    http_response = requests.put(response, data=f,headers=headers)
+                    print('http:',http_response.status_code)
+                if http_response.status_code == 200:
                     object_name_list.append(OBJECT_NAME)
             except:
-                raise NetworkError("Impossible to upload examples ..")
+                raise NetworkError("Could not upload examples to s3")
 
-        to_send2 = {"token": self.token, "training_id": self.training_id, "urls": object_name_list}
+        to_send2 = {"token": self.token,"network_id": self.network_id,
+                    "training_id": self.training_id, "urls": object_name_list}
         try:
             r = requests.post(self.host + 'post_preview', data=json.dumps(to_send2))
             if r.status_code != 201:
-                logger.info(r.text)
+                print(r.text)
                 raise ValueError("Errors.")
             logger.info("A snapshot of results has been saved to the platform")
         except:
-            raise NetworkError("Could not Upload Preview to Picsell.ia backend")
-
+            raise NetworkError("Could not upload to Picsell.ia Backend")
 
     def send_weights(self):
 
