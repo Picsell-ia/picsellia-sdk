@@ -10,7 +10,6 @@ from PIL import Image, ImageDraw
 from exceptions import *
 import logging
 
-logger = logging.getLogger(__name__)
 
 class Client:
     """
@@ -23,7 +22,7 @@ class Client:
                                         - save weights and SavedModel to Picsell.ia server.
 
     """
-    def __init__(self, token=None, host="http://127.0.0.1:8000/sdk/", png_dir=None):
+    def __init__(self, token=None, png_dir=None, host="http://127.0.0.1:8000/sdk/"):
         """ Creates and initializes a Picsell.ia Client.
         Args:
             token (str): TOKEN key, given on the platform.
@@ -42,19 +41,11 @@ class Client:
         to_send = {"token": token}
         self.host = host
 
-        if png_dir is None:
-            self.png_dir = self.project_id + '/images/'
-        else:
-            self.png_dir = png_dir
-            if not len(os.listdir(self.png_dir)) != 0:
-                raise ResourceNotFoundError("Can't find images at %s" % (self.png_dir))
-
-            for filename in os.listdir(self.png_dir):
-                if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
-                    raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split(.)[-1]))
 
 
-        logger.info("Initializing Picsell.ia Client at {} ...".format(host))
+
+
+        print("Initializing Picsell.ia Client at {} ...".format(host))
 
         try:
             r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
@@ -63,11 +54,21 @@ class Client:
             self.token = token
             self.project_id = r.json()["project_id"]
 
-            logger.info("Connection established at %s" % (host))
+            print("Connection established at %s" % (host))
 
         except:
             raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+        if png_dir is None:
+            self.png_dir = self.project_id + '/images/'
+        else:
+            self.png_dir = png_dir
+            print("Looking for images @ %s ..." % self.png_dir)
+            if not len(os.listdir(self.png_dir)) != 0:
+                raise ResourceNotFoundError("Can't find images at %s" % (self.png_dir))
 
+            for filename in os.listdir(self.png_dir):
+                if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
+                    raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
     def init_model(self, model_name):
         """ Initialise the NeuralNet instance on Picsell.ia server.
               If the model name exists on the server for this project, you will create a new version of your training.
@@ -102,7 +103,7 @@ class Client:
             if r.status_code == 400:
                 raise AuthenticationError('The token provided does not match any of the known token for profile.')
 
-            logger.info("Connection Established")
+            print("Connection Established")
 
             self.network_id = r.json()["network_id"]
             self.training_id = r.json()["training_id"]
@@ -112,9 +113,9 @@ class Client:
 
 
         if self.training_id == 0:
-            logger.info("It's your first training for this project")
+            print("It's your first training for this project")
         else:
-            logger.info("It's the training number {} for this project".format(self.training_id))
+            print("It's the training number {} for this project".format(self.training_id))
 
 
         self.dict_annotations = {}
@@ -127,38 +128,38 @@ class Client:
         self.exported_model = self.base_dir + 'exported_model/'
 
         if not os.path.isdir(self.project_id):
-            logger.info("First time using Picsell.ia on this project, initializing directories ...")
+            print("First time using Picsell.ia on this project, initializing directories ...")
             os.mkdir(self.project_id)
 
         if not os.path.isdir(os.path.join(self.project_id, self.network_id)):
             os.mkdir(os.path.join(self.project_id, self.network_id))
 
         if not os.path.isdir(self.base_dir):
-            logger.info("Creating directory for project {}".format(self.base_dir))
+            print("Creating directory for project {}".format(self.base_dir))
             os.mkdir(self.base_dir)
 
         if not os.path.isdir(self.png_dir):
-            logger.info("Creating directory for PNG Images of project {}".format(self.base_dir))
+            print("Creating directory for PNG Images of project {}".format(self.base_dir))
             os.mkdir(self.png_dir)
 
         if not os.path.isdir(self.checkpoint_dir):
-            logger.info("Creating directory for checkpoints project {}".format(self.base_dir))
+            print("Creating directory for checkpoints project {}".format(self.base_dir))
             os.mkdir(self.checkpoint_dir)
 
         if not os.path.isdir(self.log_dir):
-            logger.info("Creating directory for logs of project {}".format(self.log_dir))
+            print("Creating directory for logs of project {}".format(self.log_dir))
             os.mkdir(self.log_dir)
 
         if not os.path.isdir(self.record_dir):
-            logger.info("Creating directory for records of project {}".format(self.base_dir))
+            print("Creating directory for records of project {}".format(self.base_dir))
             os.mkdir(self.record_dir)
 
         if not os.path.isdir(self.config_dir):
-            logger.info("Creating directory for config of project {}".format(self.base_dir))
+            print("Creating directory for config of project {}".format(self.base_dir))
             os.mkdir(self.config_dir)
 
         if not os.path.isdir(self.results_dir):
-            logger.info("Creating directory for results of project {}".format(self.results_dir))
+            print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
 
     def dl_annotations(self, option="train"):
@@ -173,7 +174,7 @@ class Client:
                 ResourceNotFoundError: If we can't find any annotations for that project.
             """
 
-        logger.info("Downloading annotations of project {} ...".format(self.token))
+        print("Downloading annotations of project {} ...".format(self.token))
 
         try:
             to_send = {"token": self.token, "type": option}
@@ -182,7 +183,7 @@ class Client:
             if r.status_code != 200:
                 return ResourceNotFoundError("There is no annotations found for this project")
 
-            logger.info("Annotations pulled ...")
+            print("Annotations pulled ...")
             self.dict_annotations = r.json()
 
         except:
@@ -198,6 +199,8 @@ class Client:
         Raises:
             ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
         """
+        if not hasattr(self, "dict_annotations") :
+            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
 
         if not "categories" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
@@ -208,7 +211,7 @@ class Client:
 
         final_mat = []
         cate = [v["name"] for v in self.dict_annotations["categories"]]
-        logger.info(cate)
+        print(cate)
         for img in self.dict_annotations['images']:
             cnt = [0] * len(cate)
             internal_picture_id = img["internal_picture_id"]
@@ -220,7 +223,6 @@ class Client:
             final_mat.append(cnt)
 
         L = np.array(final_mat).T
-        logger.info(L)
         train_total = np.array([sum(e) for e in L])
         nc, n = L.shape
         train_mins = prop * train_total
@@ -241,7 +243,6 @@ class Client:
         problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
         problem.solve()
         result = x.value
-        logger.info(result)
         self.index_url = [int(round(i)) for i in result]
 
     def _get_and_send_labels_repartition_obj_detection(self):
@@ -256,6 +257,9 @@ class Client:
         Raises:
             ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
         """
+
+        if not hasattr(self, "dict_annotations") :
+            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
 
         if not "categories" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
@@ -300,6 +304,9 @@ class Client:
 
         """
 
+        if not hasattr(self, "dict_annotations") :
+            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
+
         if not "images" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
 
@@ -310,7 +317,7 @@ class Client:
         self.eval_list_id = []
         cnt = 0
 
-        logger.info("Downloading PNG images to your machine ...")
+        print("Downloading PNG images to your machine ...")
 
         try:
             self._train_valid_split_obj_detection(prop)
@@ -336,12 +343,12 @@ class Client:
                 except:
                     raise ResourceNotFoundError("Image %s can't be downloaded" % (pic_name))
 
-        logger.info("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
+        print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
                                                                                   len(self.eval_list_id)))
-        logger.info("{} files were already on your machine".format(len(images_infos) - cnt))
-        logger.info(" {} PNG images have been downloaded to your machine".format(cnt))
+        print("{} files were already on your machine".format(len(images_infos) - cnt))
+        print(" {} PNG images have been downloaded to your machine".format(cnt))
 
-        logger.info("Sending repartition to Picsell.ia backend")
+        print("Sending repartition to Picsell.ia backend")
 
         label_train, label_test, cate = self._get_and_send_labels_repartition_obj_detection()
 
@@ -355,7 +362,7 @@ class Client:
             if r.status_code != 201:
                 raise NetworkError('Can not send repartition to Picsell.ia Backend')
 
-            logger.info("Repartition send ..")
+            print("Repartition send ..")
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
 
@@ -377,8 +384,12 @@ class Client:
                                     If no directories have been created first.
 
         """
-        logger.info("Generating labelmap ...")
+        print("Generating labelmap ...")
+        if not hasattr(self, "dict_annotations") or hasattr(self, "base_dir"):
+            raise ResourceNotFoundError("Please init model and dl_annotation()")
+
         self.label_path = '{}/label_map.pbtxt'.format(self.base_dir)
+
 
         if not "categories" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation() first")
@@ -391,7 +402,7 @@ class Client:
                     name = category["name"]
                     labelmap_file.write("item {\n\tname: \"" + name + "\"" + "\n\tid: " + str(k + 1) + "\n}\n")
                 labelmap_file.close()
-            logger.info("Label_map.pbtxt crée @ {}".format(self.label_path))
+            print("Label_map.pbtxt crée @ {}".format(self.label_path))
 
         except:
             raise ResourceNotFoundError("No directory found, please call init_model() function first")
@@ -415,7 +426,7 @@ class Client:
             to_send = {"object_name": self.OBJECT_NAME}
             r = requests.get(self.host + 'init_upload', data=json.dumps(to_send))
             if r.status_code != 200:
-                logger.info(r.text)
+                print(r.text)
                 return False
             self.uploadId = r.json()["upload_id"]
 
@@ -429,7 +440,8 @@ class Client:
             NetworkError: If it impossible to initialize upload
 
         """
-
+        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "OBJECT_NAME") or hasattr(self, "uploadId"):
+            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
             to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
                        "upload_id": self.uploadId, "part_no": no_part}
@@ -448,6 +460,8 @@ class Client:
             NetworkError: If it impossible to initialize upload
 
         """
+        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "OBJECT_NAME") or hasattr(self, "parts"):
+            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
             to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
                        "upload_id": self.uploadId, "parts": parts, "network_id": self.network_id, "training_id": self.training_id}
@@ -469,13 +483,13 @@ class Client:
     #
     #     """
     #
-    #     logger.info("Downloading weights ...")
+    #     print("Downloading weights ...")
     #     to_send = {"token": self.token, "version": version}
     #     r = requests.get(self.host + 'get_checkpoint', data=json.dumps(to_send))
     #     date = time.strftime("%Y%m%d-%H%M%S")
     #
     #     if r.status_code != 200:
-    #         logger.info(r.text)
+    #         print(r.text)
     #         return False
     #
     #     self.url_weights = r.json()["url"]
@@ -488,7 +502,7 @@ class Client:
     #                     f.write(chunk)
     #                     # f.flush()
     #
-    #     logger.info("Weights pulled to your machine ...")
+    #     print("Weights pulled to your machine ...")
 
     def send_logs(self, logs):
         """Send training logs to Picsell.ia Platform
@@ -501,13 +515,16 @@ class Client:
 
         """
 
+        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "host") or hasattr(self, "token"):
+            raise ResourceNotFoundError("Please initialize model with init_model()")
+
         try:
             to_send = {"token": self.token, "training_id": self.training_id, "logs": logs,  "network_id": self.network_id}
             r = requests.post(self.host + 'post_logs', data=json.dumps(to_send))
             if r.status_code != 201:
                 raise NetworkError("The logs have not been send because %s" %(r.text))
 
-            logger.info(
+            print(
                 "Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
 
         except:
@@ -522,12 +539,19 @@ class Client:
         Raises:
             NetworkError: If it impossible to initialize upload
             FileNotFoundError:
+            ResourceNotFoundError:
 
         """
+
+
+
         if id==None:
-            results_dir = self.results_dir
-            list_img = os.listdir(results_dir)
-            assert len(list_img) != 0, 'No example have been created'
+            try:
+                results_dir = self.results_dir
+                list_img = os.listdir(results_dir)
+                assert len(list_img) != 0, 'No example have been created'
+            except:
+                raise ResourceNotFoundError("You didn't init_model(), please call this before sending examples")
         else:
             base_dir = '{}/{}/'.format(self.project_id,self.network_id)
             if str(id) in os.listdir(base_dir):
@@ -572,7 +596,7 @@ class Client:
             if r.status_code != 201:
                 print(r.text)
                 raise ValueError("Errors.")
-            logger.info("A snapshot of results has been saved to the platform")
+            print("A snapshot of results has been saved to the platform")
         except:
             raise NetworkError("Could not upload to Picsell.ia Backend")
 
@@ -586,6 +610,9 @@ class Client:
             ResourceNotFoundError: If no visual results saved in /project_id/network_id/training_id/results/
 
         """
+
+        if not hasattr(self, "training_id") or hasattr(self, "network_id") or hasattr(self, "host") or hasattr(self, "token"):
+            raise ResourceNotFoundError("Please initialize model with init_model()")
         max_size = 5 * 1024 * 1024
         urls = []
         self._init_multipart()
@@ -599,7 +626,7 @@ class Client:
                     urls.append(signed_url)
                 parts = []
                 for num, url in enumerate(urls):
-                    logger.info('*'*num)
+                    print('*'*num)
                     part = num + 1
                     try:
                         file_data = f.read(max_size)
@@ -616,7 +643,7 @@ class Client:
             raise NetworkError("Impossible to upload frozen graph to Picsell.ia backend")
 
         if self._complete_part_upload(parts):
-            logger.info("Your exported model have been uploaded successfully to our cloud.")
+            print("Your exported model have been uploaded successfully to our cloud.")
 
 
     # def list_weights(self):
@@ -625,18 +652,18 @@ class Client:
     #     Method to list all available weights, copy paste the version you want to start training from this checkpoints
     #
     #     """
-    #     logger.info("------------------------------------------")
+    #     print("------------------------------------------")
     #     to_send = {"token": self.token}
     #     r = requests.get(self.host + 'get_checkpoints_list', data=json.dumps(to_send))
     #
     #     if r.status_code != 200:
-    #         logger.info(r.text)
+    #         print(r.text)
     #         return False
     #
     #     resp = r.json()
     #     for k, v in resp.items():
-    #         logger.info("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
-    #         logger.info("------------------------------------------")
+    #         print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
+    #         print("------------------------------------------")
 
     def tf_vars_generator(self, label_map, ensemble='train'):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
@@ -825,10 +852,12 @@ class Client:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send))
             if r.status_code != 201:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            logger.info("Your annotations has been uploaded, you can now see them in the platform")
+            print("Your annotations has been uploaded, you can now see them in the platform")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
 if __name__ == '__main__':
-    client = Client(token="f8ece6db-125f-48f1-ac72-0e885c5b3f5d", host="https://backstage.picsellia.com/sdk/")
-    client.init_model("ok")
+    client = Client(token="8054234f-408e-4aee-ad4f-5346ff572d46", host="https://backstage.picsellia.com/sdk/", png_dir='/home/batman/Documents/PicsellAL/PennFudanPed/PNGImages')
+    client.init_model("first_model")
+    client.dl_annotations()
+    client.local_pic_save()
