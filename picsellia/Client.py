@@ -665,7 +665,7 @@ class Client:
     #         print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
     #         print("------------------------------------------")
 
-    def tf_vars_generator(self, label_map, ensemble='train'):
+    def tf_vars_generator(self, label_map, ensemble='train', annotations_type="polygon"):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
 
         Generator for variable needed to instantiate a tf example needed for training.
@@ -673,6 +673,7 @@ class Client:
         Args :
             label_map (tf format)
             ensemble (str) : Chose between train & test
+            annotations_type: "polygon" or "rectangle"
 
         Returns :
             (width, height, xmins, xmaxs, ymins, ymaxs, filename,
@@ -691,12 +692,6 @@ class Client:
             path_list = self.eval_list
             id_list = self.eval_list_id
 
-        if len(train_list) == 0 or len(eval_list) == 0:
-            raise ResourceNotFoundError("No list for training and eval have been created, please download images of run train_test_split_obj_detection()")
-
-        if not "annotations" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation() first")
-
         for path, ID in zip(path_list, id_list):
             xmins = []
             xmaxs = []
@@ -708,47 +703,59 @@ class Client:
 
             internal_picture_id = ID
 
-            try:
-                with open(path, 'rb') as fid:
-                    encoded_jpg = fid.read()
-                encoded_jpg_io = io.BytesIO(encoded_jpg)
-                image = Image.open(encoded_jpg_io)
-            except:
-                raise ResourceNotFoundError("Can't open file @ %s" % (path))
-
+            with open(path, 'rb') as fid:
+                encoded_jpg = fid.read()
+            encoded_jpg_io = io.BytesIO(encoded_jpg)
+            image = Image.open(encoded_jpg_io)
             width, height = image.size
             filename = path.encode('utf8')
             image_format = '{}'.format(path.split('.')[-1])
             image_format = bytes(image_format.encode('utf8'))
-            for a in self.dict_annotations["annotations"]:
-                if internal_picture_id == a["internal_picture_id"]:
-                    if "polygon" in a.keys():
-                        geo = a["polygon"]["geometry"]
-                        poly = []
-                        for coord in geo:
-                            poly.append([[coord["x"], coord["y"]]])
+            
+            if annotations_type=="polygon":
+                for a in self.dict_annotations["annotations"]:
+                    if internal_picture_id == a["internal_picture_id"]:                       
+                        if "polygon" in a.keys():
+                            geo = a["polygon"]["geometry"]
+                            poly = []
+                            for coord in geo:
+                                poly.append([[coord["x"], coord["y"]]])
 
-                        poly = np.array(poly, dtype=np.float32)
-                        mask = np.zeros((height, width), dtype=np.uint8)
-                        mask = Image.fromarray(mask)
-                        ImageDraw.Draw(mask).polygon(poly, outline=1, fill=1)
-                        maskByteArr = io.BytesIO()
-                        mask.save(maskByteArr, format="PNG")
-                        maskByteArr = maskByteArr.getvalue()
-                        masks.append(maskByteArr)
+                            poly = np.array(poly, dtype=np.float32)
+                            mask = np.zeros((height, width), dtype=np.uint8)
+                            mask = Image.fromarray(mask)
+                            ImageDraw.Draw(mask).polygon(poly, outline=1, fill=1)
+                            maskByteArr = io.BytesIO()
+                            mask.save(maskByteArr, format="PNG")
+                            maskByteArr = maskByteArr.getvalue()
+                            masks.append(maskByteArr)
 
-                        x, y, w, h = cv2.boundingRect(poly)
-                        xmins.append(x / width)
-                        xmaxs.append((x + w) / width)
-                        ymins.append(y / height)
-                        ymaxs.append((y + h) / height)
-                        classes_text.append(a["label"].encode("utf8"))
-                        label_id = label_map[a["label"]]
-                        classes.append(label_id)
+                            x, y, w, h = cv2.boundingRect(poly)
+                            xmins.append(x / width)
+                            xmaxs.append((x + w) / width)
+                            ymins.append(y / height)
+                            ymaxs.append((y + h) / height)
+                            classes_text.append(a["label"].encode("utf8"))
+                            label_id = label_map[a["label"]]
+                            classes.append(label_id)
+            if annotations_type=="rectangle":
+                for a in self.dict_annotations["annotations"]:
+                    if internal_picture_id==a["internal_picture_id"]:
+                        if 'rectangle' in a.keys():
+                                xmin = a["rectangle"]["top"]
+                                xmax = xmin + a["rectangle"]["width"]
+                                ymin = a["rectangle"]["left"]
+                                ymax = ymin + a["rectangle"]["height"]
+                                xmins.append(xmin)
+                                xmaxs.append(xmax)
+                                ymins.append(ymin)
+                                ymaxs.append(ymax)
+                                classes_text.append(a["label"].encode("utf8"))
+                                label_id = label_map[a["label"]]
+                                classes.append(label_id)
 
             yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                   encoded_jpg, image_format, classes_text, classes, masks)
-
+                encoded_jpg, image_format, classes_text, classes, masks)
 
     def upload_annotations(self, annotations,format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
