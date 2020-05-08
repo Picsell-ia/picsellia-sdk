@@ -751,13 +751,13 @@ class Client:
                         for a in image_annoted["annotations"]:
                             if a["type"]==annotation_type:
                                 xmin = a["rectangle"]["top"]
-                                xmax = xmin + a["rectangle"]["width"]
+                                xmax = xmin + a["rectangle"]["height"]
                                 ymin = a["rectangle"]["left"]
-                                ymax = ymin + a["rectangle"]["height"]
-                                xmins.append(xmin/width)
-                                xmaxs.append(xmax/width)
-                                ymins.append(ymin/height)
-                                ymaxs.append(ymax/height)
+                                ymax = ymin + a["rectangle"]["width"]
+                                xmins.append(xmin/height)
+                                xmaxs.append(xmax/height)
+                                ymins.append(ymin/width)
+                                ymaxs.append(ymax/width)
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
