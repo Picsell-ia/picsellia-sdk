@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'picsellia',         # How you named your package folder (MyLib)
   packages = ['picsellia'],   # Chose the same as "name"
-  version = '0.2.28',      # Start with a small number and increase it with every change you make
+  version = '0.2.32',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Python SDK to make your code Picsell.ia compatible !',   # Give a short description about your library
   author = 'Thibaut Lucas CEO @ Picsell.ia',                   # Type in your name

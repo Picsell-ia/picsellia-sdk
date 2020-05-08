@@ -48,15 +48,17 @@ class Client:
 
         try:
             r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
-            if r.status_code == 400:
-                raise AuthenticationError('The token provided does not match any of the known token for profile.')
-            self.token = token
-            self.project_id = r.json()["project_id"]
-
-            print("Connection established at %s" % (host))
-
         except:
-            raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
+        if r.status_code == 400:
+            raise AuthenticationError('The token provided does not match any of the known token for profile.')
+        self.token = token
+        self.project_id = r.json()["project_id"]
+
+        print("Connection established at %s" % (host))
+
+
         if png_dir is None:
             self.png_dir = self.project_id + '/images/'
         else:
@@ -674,7 +676,7 @@ class Client:
             ensemble (str) : Chose between train & test
             annotation_type: "polygon" or "rectangle"
 
-        Returns :
+        Yields :
             (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                    encoded_jpg, image_format, classes_text, classes, masks)
 
@@ -715,10 +717,10 @@ class Client:
             image_format = bytes(image_format.encode('utf8'))
 
             if annotation_type=="polygon":
-                for image_annoted in self.dict_annotations["annotations"]:
-                    if internal_picture_id==image_annoted["internal_picture_id"]:
-                        for a in image_annoted["annotations"]:
-                            if a["type"]==annotation_type:
+                for a in self.dict_annotations["annotations"]:
+                    if internal_picture_id == a["internal_picture_id"]:
+                        try:
+                            if "polygon" in a.keys():
                                 geo = a["polygon"]["geometry"]
                                 poly = []
                                 for coord in geo:
@@ -742,25 +744,29 @@ class Client:
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
 
+                        except:
+                            pass
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                    encoded_jpg, image_format, classes_text, classes, masks)
+                encoded_jpg, image_format, classes_text, classes, masks)
 
             elif annotation_type=="rectangle":
-                for image_annoted in self.dict_annotations["annotations"]:
-                    if internal_picture_id==image_annoted["internal_picture_id"]:
-                        for a in image_annoted["annotations"]:
-                            if a["type"]==annotation_type:
+                for a in self.dict_annotations["annotations"]:
+                    if internal_picture_id==a["internal_picture_id"]:
+                        try:
+                            if 'rectangle' in a.keys():
                                 xmin = a["rectangle"]["top"]
-                                xmax = xmin + a["rectangle"]["height"]
+                                xmax = xmin + a["rectangle"]["width"]
                                 ymin = a["rectangle"]["left"]
-                                ymax = ymin + a["rectangle"]["width"]
-                                xmins.append(xmin/height)
-                                xmaxs.append(xmax/height)
-                                ymins.append(ymin/width)
-                                ymaxs.append(ymax/width)
+                                ymax = ymin + a["rectangle"]["height"]
+                                xmins.append(xmin/width)
+                                xmaxs.append(xmax/width)
+                                ymins.append(ymin/height)
+                                ymaxs.append(ymax/height)
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
+                        except:
+                            pass
 
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                     encoded_jpg, image_format, classes_text, classes)
@@ -875,4 +881,3 @@ if __name__ == '__main__':
     client = Client(token="8054234f-408e-4aee-ad4f-5346ff572d46", host="https://backstage.picsellia.com/sdk/", png_dir='/home/batman/Documents/PicsellAL/PennFudanPed/PNGImages')
     client.init_model("first_model")
     client.dl_annotations()
-    client.local_pic_save()
