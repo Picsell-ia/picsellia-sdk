@@ -8,7 +8,7 @@ import requests
 import time
 from PIL import Image, ImageDraw
 from picsellia.exceptions import *
-
+import sys
 
 class Client:
     """
@@ -70,7 +70,8 @@ class Client:
             for filename in os.listdir(self.png_dir):
                 if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
                     raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
-    def init_model(self, model_name):
+
+    def init_model(self, model_name, custom=False, init="base", selected_model="mask_rcnn/"):
         """ Initialise the NeuralNet instance on Picsell.ia server.
               If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -100,18 +101,35 @@ class Client:
         to_send = {"model_name": model_name, "token": self.token}
 
         try:
-            r = requests.get(self.host + 'init_model', data=json.dumps(to_send))
-            if r.status_code == 400:
-                raise AuthenticationError('The token provided does not match any of the known token for profile.')
-
-            print("Connection Established")
-
-            self.network_id = r.json()["network_id"]
-            self.training_id = r.json()["training_id"]
-
+            pass
         except:
             raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
 
+        r = requests.get(self.host + 'init_model', data=json.dumps(to_send))
+        if r.status_code == 400:
+            raise AuthenticationError('The token provided does not match any of the known token for profile.')
+
+        print("Connection Established")
+
+        self.network_id = r.json()["network_id"]
+        self.training_id = r.json()["training_id"]
+
+        if init=='checkpoints':
+            try:
+                self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+                self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+                self.model_selected = self.dl_checkpoints()
+            except:
+                raise ResourceNotFoundError("There are no existing checkpoints for this model. \
+                Upload checkpoints or set init to 'base'")
+
+        elif init=='base':
+            if custom==False:
+                self.model_selected = "models/"+selected_model
+            else:
+                self.model_selected = None
+        else:
+            raise AttributeError("init must be 'checkpoints' or 'base' ")
 
         if self.training_id == 0:
             print("It's your first training for this project")
@@ -120,6 +138,11 @@ class Client:
 
 
         self.dict_annotations = {}
+        self.setup_dirs()
+        return self.model_selected
+
+
+    def setup_dirs(self):
         self.base_dir = "{}/{}/{}/".format(self.project_id, self.network_id, self.training_id)
         self.log_dir = self.base_dir + "logs/"
         self.checkpoint_dir = self.base_dir + 'checkpoint/'
@@ -127,6 +150,7 @@ class Client:
         self.config_dir = self.base_dir + 'config/'
         self.results_dir = self.base_dir + 'results/'
         self.exported_model = self.base_dir + 'exported_model/'
+
 
         if not os.path.isdir(self.project_id):
             print("First time using Picsell.ia on this project, initializing directories ...")
@@ -162,6 +186,68 @@ class Client:
         if not os.path.isdir(self.results_dir):
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
+
+    def dl_checkpoints(self):
+        try:
+            url = self._get_presigned_url('get',self.checkpoint_index)
+            if not 'origin_checkpoints' in os.listdir(self.base_dir):
+                os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
+            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+            checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])
+            with open(checkpoint_file, 'wb') as handler:
+                print ("Downloading %s" % self.checkpoint_index)
+                response = requests.get(url, stream=True)
+                total_length = response.headers.get('content-length')
+                if total_length is None: # no content length header
+                    print("couldn't download checkpoint index file")
+                    self.checkpoint_index = None
+                else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for data in response.iter_content(chunk_size=1024):
+                        dl += len(data)
+                        handler.write(data)
+                        done = int(50 * dl / total_length)
+                        sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
+                        sys.stdout.flush()
+                    print('Checkpoint Index downloaded')
+
+        except:
+            print("no ckpt.index file found")
+            self.checkpoint_index = None
+
+        try:
+            url = self._get_presigned_url('get',self.checkpoint_data)
+            if not 'origin_checkpoints' in os.listdir(self.base_dir):
+                os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
+            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+            checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
+            with open(checkpoint_file, 'wb') as handler:
+                print ("Downloading %s" % self.checkpoint_data)
+                response = requests.get(url, stream=True)
+                total_length = response.headers.get('content-length')
+                if total_length is None: # no content length header
+                    print("couldn't download checkpoint data file")
+                    self.checkpoint_data = None
+                else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for data in response.iter_content(chunk_size=4096):
+                        dl += len(data)
+                        handler.write(data)
+                        done = int(50 * dl / total_length)
+                        sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
+                        sys.stdout.flush()
+                    print('Checkpoint Data downloaded')
+        except:
+            print("no ckpt.data file found")
+            self.checkpoint_data = None
+
+        if (self.checkpoint_index==None) or (self.checkpoint_data==None):
+            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
+            Upload checkpoints or set init to 'base'")
+        else:
+            return os.path.join(self.base_dir,'origin_checkpoints')
 
     def dl_annotations(self, option="train"):
         """ Pull all the annotations made on Picsell.ia Platform for your project.
@@ -367,6 +453,7 @@ class Client:
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
 
+
     def generate_labelmap(self):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
         ----------------------------------------------------------
@@ -408,6 +495,23 @@ class Client:
         except:
             raise ResourceNotFoundError("No directory found, please call init_model() function first")
 
+
+    def _get_presigned_url(self,method,object_name):
+        try:
+            to_send = {"token": self.token, "object_name": object_name}
+            if method=='post':
+                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
+            if method=='get':
+                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send))
+            if r.status_code != 200:
+                print(r.text)
+                raise ValueError("Errors.")
+            response = r.json()["url"]
+            return response
+        except:
+            raise NetworkError("Could not get an url to post annotations")
+
+
     def _init_multipart(self):
         """Initialize the upload to saved Checkpoints or SavedModel
 
@@ -416,12 +520,6 @@ class Client:
             ResourceNotFoundError: If no saved_model saved
 
         """
-        date = time.strftime("%Y%m%d-%H%M%S")
-
-        self.OBJECT_NAME = '{}saved_model/saved_model.pb'.format(self.exported_model)  # Get the actual timestamp
-
-        if not os.path.isfile(self.OBJECT_NAME):
-            raise ResourceNotFoundError('Saved Model does not exists')
 
         try:
             to_send = {"object_name": self.OBJECT_NAME}
@@ -433,6 +531,7 @@ class Client:
 
         except:
             raise NetworkError('Impossible to initialize Upload')
+
 
     def _get_url_for_part(self, no_part):
         """Get a pre-signed url to upload a part of Checkpoints or SavedModel
@@ -453,7 +552,37 @@ class Client:
         except:
             raise NetworkError("Impossible to get an url..")
 
-    def _complete_part_upload(self, parts):
+    def _upload_part(self,file_path):
+        try:
+            max_size = 5 * 1024 * 1024
+            urls = []
+            file_size = os.path.getsize(file_path)
+            upload_by = int(file_size / max_size) + 1
+            with open(file_path, 'rb') as f:
+                for part in range(1, upload_by + 1):
+                    signed_url = self._get_url_for_part(part)
+                    urls.append(signed_url)
+                parts = []
+                for num, url in enumerate(urls):
+                    part = num + 1
+                    done = int(50 * num / len(urls))
+                    try:
+                        file_data = f.read(max_size)
+                        res = requests.put(url, data=file_data)
+                        if res.status_code != 200:
+                            raise NetworkError("Impossible to put part no {}\n because {}".format(num+1, res.text))
+                        etag = res.headers['ETag']
+                        parts.append({'ETag': etag, 'PartNumber': part})
+                        sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
+                        sys.stdout.flush()
+                    except:
+                        raise NetworkError("Impossible to put part no {}".format(num+1))
+                return parts
+        except:
+            raise NetworkError("Impossible to upload frozen graph to Picsell.ia backend")
+
+
+    def _complete_part_upload(self, parts,object_name,file_type):
 
         """Complete the upload a part of Checkpoints or SavedModel
 
@@ -464,7 +593,7 @@ class Client:
         if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME") or not hasattr(self, "parts"):
             raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
-            to_send = {"token": self.token, "object_name": self.OBJECT_NAME,
+            to_send = {"token": self.token, "object_name": object_name,"file_type":file_type,
                        "upload_id": self.uploadId, "parts": parts, "network_id": self.network_id, "training_id": self.training_id}
 
             r = requests.get(self.host + 'complete_upload', data=json.dumps(to_send))
@@ -543,9 +672,6 @@ class Client:
             ResourceNotFoundError:
 
         """
-
-
-
         if id==None:
             try:
                 results_dir = self.results_dir
@@ -568,24 +694,15 @@ class Client:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("Can't locate file @ %s" % (file_path))
             OBJECT_NAME = file_path
+            response =self._get_presigned_url('post',OBJECT_NAME)
             to_send = {"token": self.token, "object_name": OBJECT_NAME}
-            try:
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
-                if r.status_code != 200:
-                    print(r.text)
-                    raise ValueError("Errors.")
-                response = r.json()["url"]
-                print('response:',response)
-            except:
-                raise NetworkError("Could not get an url to post annotations")
 
             try:
                 with open(file_path, 'rb') as f:
                     files = {'file': (OBJECT_NAME, f)}
-                    headers = {'content-type': 'image/png'}
-                    http_response = requests.put(response, data=f,headers=headers)
+                    http_response = requests.post(response['url'], data=response['fields'], files=files)
                     print('http:',http_response.status_code)
-                if http_response.status_code == 200:
+                if http_response.status_code == 204:
                     object_name_list.append(OBJECT_NAME)
             except:
                 raise NetworkError("Could not upload examples to s3")
@@ -601,7 +718,36 @@ class Client:
         except:
             raise NetworkError("Could not upload to Picsell.ia Backend")
 
-    def send_weights(self):
+    def send_weights(self,file_path=None):
+
+        """Send frozen graph for inference to Picsell.ia Platform
+
+
+        Raises:
+            NetworkError: If it impossible to initialize upload
+            ResourceNotFoundError: If no visual results saved in /project_id/network_id/training_id/results/
+
+        """
+
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "token"):
+            raise ResourceNotFoundError("Please initialize model with init_model()")
+
+        if file_path!=None:
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError("File not found")
+            file_name = file_path.split('/')[-1]
+            self.OBJECT_NAME = '{}saved_model/{}'.format(self.exported_model,file_name)
+        else:
+            file_path = '{}saved_model/saved_model.pb'.format(self.exported_model)
+            self.OBJECT_NAME = file_path
+        parts = self._init_multipart()
+        self._upload_part(file_path)
+
+        if self._complete_part_upload(parts,self.OBJECT_NAME,'model'):
+
+            print("Your exported model have been uploaded successfully to our cloud.")
+
+    def send_checkpoints(self,index_path=None,data_path=None):
 
         """Send frozen graph for inference to Picsell.ia Platform
 
@@ -616,55 +762,60 @@ class Client:
             raise ResourceNotFoundError("Please initialize model with init_model()")
         max_size = 5 * 1024 * 1024
         urls = []
-        self._init_multipart()
-        file_size = os.path.getsize(self.OBJECT_NAME)
-        upload_by = int(file_size / max_size) + 1
+        file_list = os.listdir(self.checkpoint_dir)
+        if (index_path!=None) and (data_path!=None):
+            if not os.path.isfile(index_path):
+                raise FileNotFoundError("{}: no such file".format(index_path))
+            if not os.path.isfile(data_path):
+                raise FileNotFoundError("{}: no such file".format(data_path))
+            index_name = index_path.split('/')[-1]
+            ckpt_index_object = os.path.join(self.checkpoint_dir,index_name)
 
-        try:
-            with open(self.OBJECT_NAME, 'rb') as f:
-                for part in range(1, upload_by + 1):
-                    signed_url = self._get_url_for_part(part)
-                    urls.append(signed_url)
-                parts = []
-                for num, url in enumerate(urls):
-                    print('*'*num)
-                    part = num + 1
-                    try:
-                        file_data = f.read(max_size)
-                        res = requests.put(url, data=file_data)
+            ckpt_data_object = os.path.join(self.checkpoint_dir,data_path)
+            self.OBJECT_NAME = ckpt_data_object
 
-                        if res.status_code != 200:
-                            raise NetworkError("Impossible to put part no {}\n because {}".format(num+1, res.text))
+        elif (index_path==None) and (data_path==None):
+            ckpt_id = max([int(p.split('-')[1].split('.')[0]) for p in file_list if 'index' in p])
+            ckpt_index = "model.ckpt-{}.index".format(str(ckpt_id))
+            ckpt_index_object = os.path.join(self.checkpoint_dir,ckpt_index)
+            index_path = ckpt_index_object
 
-                        etag = res.headers['ETag']
-                        parts.append({'ETag': etag, 'PartNumber': part})
-                    except:
-                        raise NetworkError("Impossible to put part no {}".format(num+1))
-        except:
-            raise NetworkError("Impossible to upload frozen graph to Picsell.ia backend")
+            ckpt_name = "model.ckpt-{}.data".format(str(ckpt_id))
+            ckpt_data = [e for e in file_list if ckpt_name in e][0]
+            ckpt_data_object = os.path.join(self.checkpoint_dir,ckpt_data)
+            self.OBJECT_NAME = ckpt_data_object
+            data_path = ckpt_data_object
+        else:
+            raise ValueError("checkpoints' index and data file must be sent together to ensure \
+                              compatibility")
 
-        if self._complete_part_upload(parts):
+        self.send_checkpoint_index(index_path,ckpt_index_object)
+        print("Checkpoint index saved")
+        parts = self._init_multipart()
+        self._upload_part(data_path)
+
+        if self._complete_part_upload(parts,ckpt_data_object,'checkpoint'):
+
             print("Your exported model have been uploaded successfully to our cloud.")
 
 
-    # def list_weights(self):
-    #
-    #     """
-    #     Method to list all available weights, copy paste the version you want to start training from this checkpoints
-    #
-    #     """
-    #     print("------------------------------------------")
-    #     to_send = {"token": self.token}
-    #     r = requests.get(self.host + 'get_checkpoints_list', data=json.dumps(to_send))
-    #
-    #     if r.status_code != 200:
-    #         print(r.text)
-    #         return False
-    #
-    #     resp = r.json()
-    #     for k, v in resp.items():
-    #         print("Checkpoint version @ {}\nCheckpoint stored @ {}\n".format(v["date"], v["key"]))
-    #         print("------------------------------------------")
+    def send_checkpoint_index(self,filename,object_name):
+        response = self._get_presigned_url('post',object_name)
+        try:
+            with open(filename, 'rb') as f:
+                files = {'file': (filename, f)}
+                http_response = requests.post(response['url'], data=response['fields'], files=files)
+                print('http:',http_response.status_code)
+            if http_response.status_code == 204:
+                index_info = {"token": self.token, "object_name": object_name,
+                            "network_id": self.network_id}
+                r = requests.post(self.host + 'post_checkpoint_index', data=json.dumps(index_info))
+                if r.status_code != 201:
+                    print(r.text)
+                    raise ValueError("Errors.")
+        except:
+            raise NetworkError("Could not upload examples to s3")
+
 
     def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
