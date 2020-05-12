@@ -825,7 +825,7 @@ class Client:
         Args :
             label_map (tf format)
             ensemble (str) : Chose between train & test
-            annotation_type: "polygon" or "rectangle"
+            annotation_type: "polygon", "rectangle" or "classification"
 
         Yields :
             (width, height, xmins, xmaxs, ymins, ymaxs, filename,
@@ -868,61 +868,74 @@ class Client:
             image_format = bytes(image_format.encode('utf8'))
 
             if annotation_type=="polygon":
-                for a in self.dict_annotations["annotations"]:
-                    if internal_picture_id == a["internal_picture_id"]:
-                        try:
-                            if "polygon" in a.keys():
-                                geo = a["polygon"]["geometry"]
-                                poly = []
-                                for coord in geo:
-                                    poly.append([[coord["x"], coord["y"]]])
+                for image_annoted in self.dict_annotations["annotations"]:
+                    if internal_picture_id == image_annoted["internal_picture_id"]:
+                        for a in image_annoted["annotations"]:
+                            try:
+                                if "polygon" in a.keys():
+                                    geo = a["polygon"]["geometry"]
+                                    poly = []
+                                    for coord in geo:
+                                        poly.append([[coord["x"], coord["y"]]])
 
-                                poly = np.array(poly, dtype=np.float32)
-                                mask = np.zeros((height, width), dtype=np.uint8)
-                                mask = Image.fromarray(mask)
-                                ImageDraw.Draw(mask).polygon(poly, outline=1, fill=1)
-                                maskByteArr = io.BytesIO()
-                                mask.save(maskByteArr, format="PNG")
-                                maskByteArr = maskByteArr.getvalue()
-                                masks.append(maskByteArr)
+                                    poly = np.array(poly, dtype=np.float32)
+                                    mask = np.zeros((height, width), dtype=np.uint8)
+                                    mask = Image.fromarray(mask)
+                                    ImageDraw.Draw(mask).polygon(poly, outline=1, fill=1)
+                                    maskByteArr = io.BytesIO()
+                                    mask.save(maskByteArr, format="PNG")
+                                    maskByteArr = maskByteArr.getvalue()
+                                    masks.append(maskByteArr)
 
-                                x, y, w, h = cv2.boundingRect(poly)
-                                xmins.append(x / width)
-                                xmaxs.append((x + w) / width)
-                                ymins.append(y / height)
-                                ymaxs.append((y + h) / height)
-                                classes_text.append(a["label"].encode("utf8"))
-                                label_id = label_map[a["label"]]
-                                classes.append(label_id)
+                                    x, y, w, h = cv2.boundingRect(poly)
+                                    xmins.append(x / width)
+                                    xmaxs.append((x + w) / width)
+                                    ymins.append(y / height)
+                                    ymaxs.append((y + h) / height)
+                                    classes_text.append(a["label"].encode("utf8"))
+                                    label_id = label_map[a["label"]]
+                                    classes.append(label_id)
 
-                        except:
-                            pass
+                            except:
+                                pass
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                 encoded_jpg, image_format, classes_text, classes, masks)
 
-            elif annotation_type=="rectangle":
-                for a in self.dict_annotations["annotations"]:
-                    if internal_picture_id==a["internal_picture_id"]:
-                        try:
-                            if 'rectangle' in a.keys():
-                                xmin = a["rectangle"]["top"]
-                                xmax = xmin + a["rectangle"]["width"]
-                                ymin = a["rectangle"]["left"]
-                                ymax = ymin + a["rectangle"]["height"]
-                                xmins.append(xmin/width)
-                                xmaxs.append(xmax/width)
-                                ymins.append(ymin/height)
-                                ymaxs.append(ymax/height)
-                                classes_text.append(a["label"].encode("utf8"))
-                                label_id = label_map[a["label"]]
-                                classes.append(label_id)
-                        except:
-                            pass
+            if annotation_type=="rectangle":
+                for image_annoted in self.dict_annotations["annotations"]:
+                    if internal_picture_id == image_annoted["internal_picture_id"]:
+                        for a in image_annoted["annotations"]:
+                            try:
+                                if 'rectangle' in a.keys():
+                                    xmin = a["rectangle"]["top"]
+                                    xmax = xmin + a["rectangle"]["width"]
+                                    ymin = a["rectangle"]["left"]
+                                    ymax = ymin + a["rectangle"]["height"]
+                                    xmins.append(xmin/width)
+                                    xmaxs.append(xmax/width)
+                                    ymins.append(ymin/height)
+                                    ymaxs.append(ymax/height)
+                                    classes_text.append(a["label"].encode("utf8"))
+                                    label_id = label_map[a["label"]]
+                                    classes.append(label_id)
+                            except:
+                                pass
 
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                     encoded_jpg, image_format, classes_text, classes)
 
-    def upload_annotations(self, annotations,format='picsellia'):
+            if annotation_type=="classification":
+                for image_annoted in self.dict_annotations["annotations"]:
+                    if internal_picture_id == image_annoted["internal_picture_id"]:
+                        for a in image_annoted["annotations"]:
+                            classes_text.append(a["label"].encode("utf8"))
+                            label_id = label_map[a["label"]]
+                            classes.append(label_id)
+                            
+                yield (width, height, filename, encoded_jpg, image_format, 
+                    classes_text, classes)
+
+    def upload_annotations(self, annotations, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
         Please find in our Documentation the annotations format acceoted to upload
