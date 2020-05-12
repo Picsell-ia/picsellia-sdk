@@ -843,7 +843,7 @@ class Client:
 
         """
 
-        if annotation_type not in ["polygon", "rectangle"]:
+        if annotation_type not in ["polygon", "rectangle", "classification"]:
             raise InvalidQueryError("Please select a valid annotation_type")
 
         if ensemble == "train":
