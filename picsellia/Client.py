@@ -590,7 +590,7 @@ class Client:
             NetworkError: If it impossible to initialize upload
 
         """
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME") or not hasattr(self, "parts"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME"):
             raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
         try:
             to_send = {"token": self.token, "object_name": object_name,"file_type":file_type,
@@ -736,12 +736,12 @@ class Client:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("File not found")
             file_name = file_path.split('/')[-1]
-            self.OBJECT_NAME = '{}saved_model/{}'.format(self.exported_model,file_name)
+            self.OBJECT_NAME = '{}/{}/{}'.format(self.network_id,self.training_id,file_name)
         else:
-            file_path = '{}saved_model/saved_model.pb'.format(self.exported_model)
-            self.OBJECT_NAME = file_path
-        parts = self._init_multipart()
-        self._upload_part(file_path)
+            file_path = '{}/{}/saved_model.pb'.format(self.exported_model)
+            self.OBJECT_NAME = '{}/{}/saved_model.pb'.format(self.network_id,self.training_id)
+        self._init_multipart()
+        parts = self._upload_part(file_path)
 
         if self._complete_part_upload(parts,self.OBJECT_NAME,'model'):
 
@@ -791,8 +791,8 @@ class Client:
 
         self.send_checkpoint_index(index_path,ckpt_index_object)
         print("Checkpoint index saved")
-        parts = self._init_multipart()
-        self._upload_part(data_path)
+        self._init_multipart()
+        parts = self._upload_part(data_path)
 
         if self._complete_part_upload(parts,ckpt_data_object,'checkpoint'):
 
