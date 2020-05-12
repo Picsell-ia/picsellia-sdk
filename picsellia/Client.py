@@ -483,14 +483,20 @@ class Client:
             raise ResourceNotFoundError("Please run dl_annotation() first")
 
         categories = self.dict_annotations["categories"]
-
+        labels_Network = {}
         try:
             with open(self.label_path, "w+") as labelmap_file:
                 for k, category in enumerate(categories):
                     name = category["name"]
                     labelmap_file.write("item {\n\tname: \"" + name + "\"" + "\n\tid: " + str(k + 1) + "\n}\n")
+                    labels_Network[str(k+1)] = name
                 labelmap_file.close()
             print("Label_map.pbtxt crée @ {}".format(self.label_path))
+            to_send = {"token": self.token, "labels": labels_Network}
+            r = requests.get(self.host + 'attach_labels', data=json.dumps(to_send))
+            if r.status_code != 201:
+                print(r.text)
+                raise ValueError("Errors.")
 
         except:
             raise ResourceNotFoundError("No directory found, please call init_model() function first")
@@ -931,8 +937,8 @@ class Client:
                             classes_text.append(a["label"].encode("utf8"))
                             label_id = label_map[a["label"]]
                             classes.append(label_id)
-                            
-                yield (width, height, filename, encoded_jpg, image_format, 
+
+                yield (width, height, filename, encoded_jpg, image_format,
                     classes_text, classes)
 
     def upload_annotations(self, annotations, format='picsellia'):
