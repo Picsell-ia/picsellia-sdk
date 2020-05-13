@@ -99,6 +99,7 @@ class Client:
         """
 
         assert isinstance(model_name, str), "model name must be string, got %s" % type(model_name)
+        assert init in ["checkpoints", "base"], "invalid init param, expect base or checkpoints got %s" % init
         to_send = {"model_name": model_name, "token": self.token}
 
         try:
@@ -124,7 +125,7 @@ class Client:
                 Upload checkpoints or set init to 'base'")
 
         elif init=='base':
-            if custom==False:
+            if not custom:
                 self.model_selected = "models/"+selected_model
             else:
                 self.model_selected = None
@@ -688,7 +689,7 @@ class Client:
             ResourceNotFoundError:
 
         """
-        if id==None:
+        if id is None:
             try:
                 results_dir = self.results_dir
                 list_img = os.listdir(results_dir)
@@ -779,7 +780,7 @@ class Client:
         max_size = 5 * 1024 * 1024
         urls = []
         file_list = os.listdir(self.checkpoint_dir)
-        if (index_path!=None) and (data_path!=None):
+        if (index_path is not None) and (data_path is not None):
             if not os.path.isfile(index_path):
                 raise FileNotFoundError("{}: no such file".format(index_path))
             if not os.path.isfile(data_path):
@@ -790,7 +791,7 @@ class Client:
             ckpt_data_object = os.path.join(self.checkpoint_dir,data_path)
             self.OBJECT_NAME = ckpt_data_object
 
-        elif (index_path==None) and (data_path==None):
+        elif (index_path is None) and (data_path is None):
             ckpt_id = max([int(p.split('-')[1].split('.')[0]) for p in file_list if 'index' in p])
             ckpt_index = "model.ckpt-{}.index".format(str(ckpt_id))
             ckpt_index_object = os.path.join(self.checkpoint_dir,ckpt_index)
