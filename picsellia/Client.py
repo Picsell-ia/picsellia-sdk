@@ -375,7 +375,6 @@ class Client:
 
 
 
-
     def local_pic_save(self, prop=0.8):
         """Download your training set on the machine (Use it to dl images to Google Colab etc.)
            Save it to /project_id/images/*
@@ -453,48 +452,6 @@ class Client:
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
 
-    def send_labelmap(self, label_path=None):
-        """Attach to network, it allow nicer results visualisation on hub playground
-
-        Args:
-            label_path (str) : path to label map
-        """
-
-        if label_path is None:
-            try:
-                with open(label_path, 'r') as f:
-                    label_map = f.readlines()
-                self.label_path = label_path
-            except:
-                raise ResourceNotFoundError("Can't find labelmap file")
-        else:
-            try:
-                with open(label_path, 'r') as f:
-                    label_map = f.readlines()
-            except:
-                raise ResourceNotFoundError("Can't find labelmap file")
-
-        tmp = {}
-        for i, line in enumerate(text):
-            if "name" in line:
-                name = line.split(":")[-1]
-                name = name[2:-2]
-                print(name)
-                idd = text[i + 1].split(":")[-1]
-                print(idd)
-                print(idd)
-                tmp[idd[1:-1]] = name
-
-        to_send = {"token": self.token, "labels": tmp, "network_id": self.network_id}
-
-        try:
-            r = requests.get(self.host + 'attach_labels', data=json.dumps(to_send))
-        except:
-            raise NetworkError("Could not connect to picsellia backend")
-        if r.status_code != 201:
-            print(r.text)
-            raise ValueError("Could not upload label to server")
-
     def generate_labelmap(self):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
         ----------------------------------------------------------
@@ -534,10 +491,26 @@ class Client:
                 labelmap_file.close()
             print("Label_map.pbtxt crée @ {}".format(self.label_path))
 
-
+            self.label_map = labels_Network
         except:
             raise ResourceNotFoundError("No directory found, please call init_model() function first")
 
+
+    def send_labelmap(self):
+        """Attach to network, it allow nicer results visualisation on hub playground
+        """
+
+        if not hasattr(self, "label_map"):
+            raise ValueError("Please Generate label map first")
+        to_send = {"token": self.token, "labels": self.label_map, "network_id": self.network_id}
+
+        try:
+            r = requests.get(self.host + 'attach_labels', data=json.dumps(to_send))
+        except:
+            raise NetworkError("Could not connect to picsellia backend")
+        if r.status_code != 201:
+            print(r.text)
+            raise ValueError("Could not upload label to server")
 
     def _get_presigned_url(self,method,object_name):
         try:
