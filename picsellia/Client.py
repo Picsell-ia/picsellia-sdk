@@ -44,7 +44,7 @@ class Client:
 
 
 
-        print("Initializing Picsell.ia Client at {} ...".format(host))
+        # print("Initializing Picsell.ia Client at {} ...".format(host))
 
         try:
             r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
@@ -56,8 +56,10 @@ class Client:
         self.token = token
         self.project_id = r.json()["project_id"]
         to_parse = r.json()["infos"]
-        print("Connection established at %s" % (host))
+        # print("Connection established at %s" % (host))
         self.project_name = r.json()["project_name"]
+        self.project_type = r.json()["project_type"]
+        self.network_names = r.json()["network_names"]
 
         if png_dir is None:
             self.png_dir = self.project_id + '/images/'
@@ -72,34 +74,41 @@ class Client:
                     raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
         if len(to_parse) != 0 and isinstance(to_parse[0], list):
-            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
+            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\nThis is a {} project".format(self.project_name, self.project_type))
             print("Here is the current state of your project:\n")
             for col in to_parse:
-                print("-"*10)
-                print("{} training version(s) for Network named : {}\n".format(len(col),col[0]["name"]))
-                print("-"*10)
+                print("-"*15)
+                print("{} training version(s) for Network named : {}".format(len(col),col[0]["name"]))
+                print("-"*15)
                 for training in col:
-                    print("\t\t For training id {}:\n".format(training["training_id"]))
+                    print("\t For training id {}:\n".format(training["training_id"]))
                     if training["is_datasplit"]:
-                        print("\t\t\t\t\t Train Test Set repartition : DONE\n")
+                        print("\t\t Train Test Set repartition : DONE")
                     else:
-                        print("\t\t\t\t\t Train Test Set repartition : NOT DONE\n")
+                        print("\t\t Train Test Set repartition : NOT DONE")
 
                     if training["is_examples"]:
-                        print("\t\t\t\t\t Visual results uploaded to Picsell.ia : DONE\n")
+                        print("\t\t Visual results uploaded to Picsell.ia : DONE")
                     else:
-                        print("\t\t\t\t\t Visual results uploaded to Picsell.ia : NOT DONE\n")
-                    print("\t\t\t\t\t Model version usable from Picsell.ia : DONE\n")
+                        print("\t\t Visual results uploaded to Picsell.ia : NOT DONE")
 
-        elif len(to_parse) != 0 and isinstance(to_parse[0], list):
-            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
+                    if training["is_metrics"]:
+                        print("\t\t Training logs uploaded to Picsell.ia : DONE")
+                    else:
+                        print("\t\t Training logs uploaded to Picsell.ia : NOT DONE")
+
+                    print("\t\t Model version usable from Picsell.ia : DONE")
+
+        elif to_parse is None and self.network_names is not None:
+
+            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}".format(self.project_name))
             print("You don't have any Network trained for this project yet.\n")
-            print("{} Network(s) attached to your project\n".format(len(to_parse)))
+            print("{} Network(s) attached to your project\n".format(len(self.network_names)))
             for e in to_parse:
-                print("/t/t/t - {}".format(e))
-            print("To initialise a training session, please run init_model(MODEL_NAME)\n")
+                print("\t - {}".format(e))
+            print("To initialise a training session, please run init_model(MODEL_NAME)")
 
-        elif to_parse is None:
+        elif to_parse is None and self.network_names is None:
             print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
             print("You don't have any Network attache to this project yet.\nIf you want to continue without an attached model, please initialise it with init_model(YOUR NAME)")
 
@@ -136,6 +145,15 @@ class Client:
 
         assert isinstance(model_name, str), "model name must be string, got %s" % type(model_name)
         assert init in ["checkpoints", "base"], "invalid init param, expect base or checkpoints got %s" % init
+
+        if model_name not in self.network_names:
+            a = input("The model name you provided is not linked to any existent model attached the project {}\nAre you sure you want to continue with this model name (Y/N)? ({})".format(self.project_name, model_name))
+            if a.lower() == 'y':
+                pass
+            else:
+                model_name = input("Please type the new model name")
+                self.init_model(model_name)
+
         to_send = {"model_name": model_name, "token": self.token}
 
         try:
@@ -524,7 +542,10 @@ class Client:
                 for k, category in enumerate(categories):
                     name = category["name"]
                     labelmap_file.write("item {\n\tname: \"" + name + "\"" + "\n\tid: " + str(k + 1) + "\n}\n")
-                    labels_Network[str(k+1)] = name
+                    if self.project_type == 'classification':
+                        labels_Network[str(k)] = name
+                    else:
+                        labels_Network[str(k+1)] = name
                 labelmap_file.close()
             print("Label_map.pbtxt crée @ {}".format(self.label_path))
 
@@ -771,7 +792,7 @@ class Client:
         except:
             raise NetworkError("Could not upload to Picsell.ia Backend")
 
-    def send_weights(self,file_path=None):
+    def send_model(self,file_path=None):
 
         """Send frozen graph for inference to Picsell.ia Platform
 
