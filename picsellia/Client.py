@@ -55,9 +55,9 @@ class Client:
             raise AuthenticationError('The token provided does not match any of the known token for profile.')
         self.token = token
         self.project_id = r.json()["project_id"]
-
+        to_parse = r.json()["infos"]
         print("Connection established at %s" % (host))
-
+        self.project_name = r.json()["project_name"]
 
         if png_dir is None:
             self.png_dir = self.project_id + '/images/'
@@ -70,6 +70,42 @@ class Client:
             for filename in os.listdir(self.png_dir):
                 if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
                     raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
+
+        if len(to_parse) != 0 and isinstance(to_parse[0], list):
+            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
+            print("Here is the current state of your project:\n")
+            for col in to_parse:
+                print("-"*10)
+                print("{} training version(s) for Network named : {}\n".format(len(col),col[0]["name"]))
+                print("-"*10)
+                for training in col:
+                    print("\t\t For training id {}:\n".format(trainind["training_id"]))
+                    if training["is_datasplit"]:
+                        print("\t\t\t\t\t Train Test Set repartition : DONE\n")
+                    else:
+                        print("\t\t\t\t\t Train Test Set repartition : NOT DONE\n")
+
+                    if training["is_examples"]:
+                        print("\t\t\t\t\t Visual results uploaded to Picsell.ia : DONE\n")
+                    else:
+                        print("\t\t\t\t\t Visual results uploaded to Picsell.ia : NOT DONE\n")
+                    print("\t\t\t\t\t Model version usable from Picsell.ia : DONE\n")
+
+        elif len(to_parse) != 0 and isinstance(to_parse[0], list):
+            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
+            print("You don't have any Network trained for this project yet.\n")
+            print("{} Network(s) attached to your project\n".format(len(to_parse)))
+            for e in to_parse:
+                print("/t/t/t - {}".format(e))
+            print("To initialise a training session, please run init_model(MODEL_NAME)\n")
+
+        elif to_parse is None:
+            print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
+            print("You don't have any Network attache to this project yet.\nIf you want to continue without an attached model, please initialise it with init_model(YOUR NAME)")
+
+
+
+
 
     def init_model(self, model_name, custom=False, init="base", selected_model="mask_rcnn/"):
         """ Initialise the NeuralNet instance on Picsell.ia server.
