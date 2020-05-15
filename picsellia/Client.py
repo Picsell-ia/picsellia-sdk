@@ -116,7 +116,7 @@ class Client:
 
 
 
-    def init_model(self, model_name, custom=False, init="base", selected_model="mask_rcnn/"):
+    def init_model(self, model_name):
         """ Initialise the NeuralNet instance on Picsell.ia server.
               If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -149,9 +149,11 @@ class Client:
         if model_name not in self.network_names:
             a = input("The model name you provided is not linked to any existent model attached the project {}\nAre you sure you want to continue with this model name (Y/N)? ({})".format(self.project_name, model_name))
             if a.lower() == 'y':
+                self.custom = True
                 pass
             else:
                 model_name = input("Please type the new model name")
+                self.custom = False
                 self.init_model(model_name)
 
         to_send = {"model_name": model_name, "token": self.token}
@@ -169,26 +171,27 @@ class Client:
         self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
 
-        if init=='checkpoints':
-            try:
-                self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-                self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-                self.model_selected = self.dl_checkpoints()
-            except:
-                raise ResourceNotFoundError("There are no existing checkpoints for this model. \
-                Upload checkpoints or set init to 'base'")
 
-        elif init=='base':
-            if not custom:
-                self.model_selected = "models/"+selected_model
-            else:
-                self.model_selected = None
-        else:
-            raise AttributeError("init must be 'checkpoints' or 'base' ")
+        try:
+            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+            self.model_selected = self.dl_checkpoints()
+        except:
+            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
+            Upload checkpoints")
 
-        if self.training_id == 0:
-            print("It's your first training for this project")
+
+
+        if self.custom:
+            print("Your working with a model not attached to your project, linking model to project now..")
+            self.dict_annotations = {}
+            self.setup_dirs()
+            return None
+
         else:
+            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+            self.model_selected = self.dl_checkpoints()
             print("It's the training number {} for this project".format(self.training_id))
 
 
@@ -244,65 +247,89 @@ class Client:
 
     def dl_checkpoints(self):
         try:
-            url = self._get_presigned_url('get',self.checkpoint_index)
-            if not 'origin_checkpoints' in os.listdir(self.base_dir):
-                os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-            checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])
-            with open(checkpoint_file, 'wb') as handler:
-                print ("Downloading %s" % self.checkpoint_index)
-                response = requests.get(url, stream=True)
-                total_length = response.headers.get('content-length')
-                if total_length is None: # no content length header
-                    print("couldn't download checkpoint index file")
-                    self.checkpoint_index = None
-                else:
-                    dl = 0
-                    total_length = int(total_length)
-                    for data in response.iter_content(chunk_size=1024):
-                        dl += len(data)
-                        handler.write(data)
-                        done = int(50 * dl / total_length)
-                        sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
-                        sys.stdout.flush()
-                    print('Checkpoint Index downloaded')
+            if not self.training_id == 0:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id-1, self.training_id,"origin_checkpoints")
+            else:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, self.training_id,"origin_checkpoints")
+
+            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 2:
+                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
+                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
+                url = self._get_presigned_url('get',self.checkpoint_index)
+
+                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+                checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])
+                with open(checkpoint_file, 'wb') as handler:
+                    print ("Downloading %s" % self.checkpoint_index)
+                    response = requests.get(url, stream=True)
+                    total_length = response.headers.get('content-length')
+                    if total_length is None: # no content length header
+                        print("couldn't download checkpoint index file")
+                        self.checkpoint_index = None
+                    else:
+                        dl = 0
+                        total_length = int(total_length)
+                        for data in response.iter_content(chunk_size=1024):
+                            dl += len(data)
+                            handler.write(data)
+                            done = int(50 * dl / total_length)
+                            sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
+                            sys.stdout.flush()
+                        print('Checkpoint Index downloaded')
+            else:
+                origin_checkpoint_path = checkpoint_dir_old
+                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])):
+                    raise FileNotFoundError(".data file does not exists")
 
         except:
-            print("no ckpt.index file found")
+            raise FileNotFoundError("no ckpt.index file found")
             self.checkpoint_index = None
 
         try:
-            url = self._get_presigned_url('get',self.checkpoint_data)
-            if not 'origin_checkpoints' in os.listdir(self.base_dir):
-                os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-            checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
-            with open(checkpoint_file, 'wb') as handler:
-                print ("Downloading %s" % self.checkpoint_data)
-                response = requests.get(url, stream=True)
-                total_length = response.headers.get('content-length')
-                if total_length is None: # no content length header
-                    print("couldn't download checkpoint data file")
-                    self.checkpoint_data = None
-                else:
-                    dl = 0
-                    total_length = int(total_length)
-                    for data in response.iter_content(chunk_size=4096):
-                        dl += len(data)
-                        handler.write(data)
-                        done = int(50 * dl / total_length)
-                        sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
-                        sys.stdout.flush()
-                    print('Checkpoint Data downloaded')
+            # url = self._get_presigned_url('get',self.checkpoint_data)
+            if not self.training_id == 0:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id-1, self.training_id,"origin_checkpoints")
+            else:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, self.training_id,"origin_checkpoints")
+
+            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 2:
+                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
+                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
+                url = self._get_presigned_url('get',self.checkpoint_index)
+
+                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+                checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
+                with open(checkpoint_file, 'wb') as handler:
+                    print ("Downloading %s" % self.checkpoint_data)
+                    response = requests.get(url, stream=True)
+                    total_length = response.headers.get('content-length')
+                    if total_length is None: # no content length header
+                        print("couldn't download checkpoint data file")
+                        self.checkpoint_data = None
+                    else:
+                        dl = 0
+                        total_length = int(total_length)
+                        for data in response.iter_content(chunk_size=4096):
+                            dl += len(data)
+                            handler.write(data)
+                            done = int(50 * dl / total_length)
+                            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
+                            sys.stdout.flush()
+                        print('Checkpoint Data downloaded')
+            else:
+                origin_checkpoint_path = checkpoint_dir_old
+                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])):
+                    raise FileNotFoundError(".index file does not exists")
+
         except:
             print("no ckpt.data file found")
             self.checkpoint_data = None
 
         if (self.checkpoint_index==None) or (self.checkpoint_data==None):
             raise ResourceNotFoundError("There are no existing checkpoints for this model. \
-            Upload checkpoints or set init to 'base'")
+            Upload checkpoints first")
         else:
-            return os.path.join(self.base_dir,'origin_checkpoints')
+            return origin_checkpoint_path
 
     def dl_annotations(self, option="train"):
         """ Pull all the annotations made on Picsell.ia Platform for your project.
