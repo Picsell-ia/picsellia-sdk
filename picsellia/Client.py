@@ -79,7 +79,7 @@ class Client:
                 print("{} training version(s) for Network named : {}\n".format(len(col),col[0]["name"]))
                 print("-"*10)
                 for training in col:
-                    print("\t\t For training id {}:\n".format(trainind["training_id"]))
+                    print("\t\t For training id {}:\n".format(training["training_id"]))
                     if training["is_datasplit"]:
                         print("\t\t\t\t\t Train Test Set repartition : DONE\n")
                     else:
