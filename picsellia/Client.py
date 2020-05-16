@@ -9,6 +9,7 @@ import time
 from PIL import Image, ImageDraw
 from picsellia.exceptions import *
 import sys
+import easygui
 
 class Client:
     """
@@ -21,7 +22,7 @@ class Client:
                                         - save weights and SavedModel to Picsell.ia server.
 
     """
-    def __init__(self, token=None, png_dir=None, host="http://127.0.0.1:8000/sdk/"):
+    def __init__(self, token=None, png_dir=None, host="https://backstage.picsellia.com/sdk/"):
         """ Creates and initializes a Picsell.ia Client.
         Args:
             token (str): TOKEN key, given on the platform.
@@ -40,12 +41,6 @@ class Client:
         to_send = {"token": token}
         self.host = host
 
-
-
-
-
-        # print("Initializing Picsell.ia Client at {} ...".format(host))
-
         try:
             r = requests.get(self.host + 'check_connection', data=json.dumps(to_send))
         except:
@@ -55,8 +50,7 @@ class Client:
             raise AuthenticationError('The token provided does not match any of the known token for profile.')
         self.token = token
         self.project_id = r.json()["project_id"]
-        to_parse = r.json()["infos"]
-        # print("Connection established at %s" % (host))
+        self.project_infos = r.json()["infos"]
         self.project_name = r.json()["project_name"]
         self.project_type = r.json()["project_type"]
         self.network_names = r.json()["network_names"]
@@ -73,12 +67,13 @@ class Client:
                 if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
                     raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
-        if len(to_parse) != 0 and isinstance(to_parse[0], list):
+        if self.project_infos is not None and self.network_names is not None:
             print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\nThis is a {} project".format(self.project_name, self.project_type))
             print("Here is the current state of your project:\n")
-            for col in to_parse:
+            for i,col in enumerate(self.project_infos):
+
                 print("-"*15)
-                print("{} training version(s) for Network named : {}".format(len(col),col[0]["name"]))
+                print("{} training version(s) for Network named : {}".format(len(col), self.network_names[i]))
                 print("-"*15)
                 for training in col:
                     print("\t For training id {}:\n".format(training["training_id"]))
@@ -97,18 +92,19 @@ class Client:
                     else:
                         print("\t\t Training logs uploaded to Picsell.ia : NOT DONE")
 
-                    print("\t\t Model version usable from Picsell.ia : DONE")
+                    print("\t\t Model usable from Picsell.ia : DONE")
 
-        elif to_parse is None and self.network_names is not None:
-
+        elif self.project_infos is None and self.network_names is not None:
+            print("-"*80)
             print("Welcome to Picsell.ia Client, this Token is linked to your project : {}".format(self.project_name))
+            print("-"*80)
             print("You don't have any Network trained for this project yet.\n")
-            print("{} Network(s) attached to your project\n".format(len(self.network_names)))
-            for e in to_parse:
+            print("{} Network(s) attached to your project:".format(len(self.network_names)))
+            for e in self.network_names:
                 print("\t - {}".format(e))
-            print("To initialise a training session, please run init_model(MODEL_NAME)")
+            print("\nTo initialise a training session, please run init_model(MODEL_NAME)\n")
 
-        elif to_parse is None and self.network_names is None:
+        elif self.project_infos is None and self.network_names is None:
             print("Welcome to Picsell.ia Client, this Token is linked to your project : {}\n".format(self.project_name))
             print("You don't have any Network attache to this project yet.\nIf you want to continue without an attached model, please initialise it with init_model(YOUR NAME)")
 
@@ -118,7 +114,7 @@ class Client:
 
     def init_model(self, model_name):
         """ Initialise the NeuralNet instance on Picsell.ia server.
-              If the model name exists on the server for this project, you will create a new version of your training.
+            If the model name exists on the server for this project, you will create a new version of your training.
 
             Create all the repositories for your training with this architecture :
 
@@ -144,10 +140,10 @@ class Client:
         """
 
         assert isinstance(model_name, str), "model name must be string, got %s" % type(model_name)
-        assert init in ["checkpoints", "base"], "invalid init param, expect base or checkpoints got %s" % init
 
-        if model_name not in self.network_names:
-            a = input("The model name you provided is not linked to any existent model attached the project {}\nAre you sure you want to continue with this model name (Y/N)? ({})".format(self.project_name, model_name))
+
+        if self.network_names is None or model_name not in self.network_names:
+            a = input("The model name you provided is not linked to any existing model attached the project {}\nCurrent attached model: {}\nAre you sure you want to continue with this model name (Y/N)? ({})".format(self.project_name, self.network_names, model_name))
             if a.lower() == 'y':
                 self.custom = True
                 pass
@@ -156,48 +152,72 @@ class Client:
                 self.custom = False
                 self.init_model(model_name)
 
+
         to_send = {"model_name": model_name, "token": self.token}
 
         try:
             r = requests.get(self.host + 'init_model', data=json.dumps(to_send))
+            print(r.json())
         except:
             raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
 
         if r.status_code == 400:
             raise AuthenticationError('The token provided does not match any of the known token for profile.')
 
-        print("Connection Established")
-
         self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
+        self.base_dir = os.path.join(self.project_id,self.network_id,str(self.training_id))
 
+        if not hasattr(self, "custom"):
+            self.custom = False
 
-        try:
-            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-            self.model_selected = self.dl_checkpoints()
-        except:
-            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
-            Upload checkpoints")
+        if self.project_infos is None:
 
+            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
+            print("The further work will be stored as training {}".format(self.training_id))
+            self.dict_annotations = {}
+            self.setup_dirs()
+            return None
 
+        elif not hasattr(self, "custom"):
+            print("jj")
+            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
+            print("The further work will be stored as training {}".format(self.training_id))
+            self.dict_annotations = {}
+            self.setup_dirs()
+            return None
 
-        if self.custom:
-            print("Your working with a model not attached to your project, linking model to project now..")
+        elif self.custom:
+            print('kk')
+            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
+            print("The further work will be stored as training {}".format(self.training_id))
             self.dict_annotations = {}
             self.setup_dirs()
             return None
 
         else:
+            try:
+                self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+                self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+                self.config_file = r.json()["checkpoints"]["config_file"]
+            except:
+                self.dict_annotations = {}
+                self.setup_dirs()
+                return None
+                # raise ResourceNotFoundError("No checkpoint present on our backend, you should restart clean by deleting your network on the platform")
+
             self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
             self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+            self.config_file = r.json()["checkpoints"]["config_file"]
+            print(self.checkpoint_index)
             self.model_selected = self.dl_checkpoints()
+            self.dict_annotations = {}
+            self.setup_dirs()
             print("It's the training number {} for this project".format(self.training_id))
+            return self.model_selected
 
 
-        self.dict_annotations = {}
-        self.setup_dirs()
-        return self.model_selected
+
 
 
     def setup_dirs(self):
@@ -246,56 +266,62 @@ class Client:
             os.mkdir(self.results_dir)
 
     def dl_checkpoints(self):
-        try:
-            if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id-1, self.training_id,"origin_checkpoints")
-            else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, self.training_id,"origin_checkpoints")
 
-            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 2:
-                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
-                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get',self.checkpoint_index)
+        if (self.checkpoint_index==None) or (self.checkpoint_data==None):
+            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
+            Upload checkpoints first")
+        # try:
+        if not self.training_id == 0:
+            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+        else:
+            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
 
-                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-                checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])
-                with open(checkpoint_file, 'wb') as handler:
-                    print ("Downloading %s" % self.checkpoint_index)
-                    response = requests.get(url, stream=True)
-                    total_length = response.headers.get('content-length')
-                    if total_length is None: # no content length header
-                        print("couldn't download checkpoint index file")
-                        self.checkpoint_index = None
-                    else:
-                        dl = 0
-                        total_length = int(total_length)
-                        for data in response.iter_content(chunk_size=1024):
-                            dl += len(data)
-                            handler.write(data)
-                            done = int(50 * dl / total_length)
-                            sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
-                            sys.stdout.flush()
-                        print('Checkpoint Index downloaded')
-            else:
-                origin_checkpoint_path = checkpoint_dir_old
-                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])):
-                    raise FileNotFoundError(".data file does not exists")
+        if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
+            if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
+                os.makedirs(os.path.join(self.base_dir,'origin_checkpoints'))
+            print("iciiiiiii" ,self.checkpoint_index)
+            url = self._get_presigned_url('get',self.checkpoint_index)
 
-        except:
-            raise FileNotFoundError("no ckpt.index file found")
-            self.checkpoint_index = None
+            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+            checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])
+            with open(checkpoint_file, 'wb') as handler:
+                print ("Downloading %s" % self.checkpoint_index)
+                response = requests.get(url, stream=True)
+                total_length = response.headers.get('content-length')
+                # if total_length is None: # no content length header
+                #     print("couldn't download checkpoint index file")
+                #     self.checkpoint_index = None
+                # else:
+                dl = 0
+                total_length = len(response.content)
+                for data in response.iter_content(chunk_size=1024):
+                    dl += len(data)
+                    handler.write(data)
+                    done = int(50 * dl / total_length)
+                    sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
+                    sys.stdout.flush()
+                print('Checkpoint Index downloaded')
+        else:
+            origin_checkpoint_path = checkpoint_dir_old
+            if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])):
+                raise FileNotFoundError(".index file does not exists")
+            print("Last checkpoint data are on your filesystem, we'll use it..")
+
+        # except:
+        #     raise FileNotFoundError("no ckpt.index file found")
+        #     self.checkpoint_index = None
 
         try:
             # url = self._get_presigned_url('get',self.checkpoint_data)
             if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id-1, self.training_id,"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
             else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, self.training_id,"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
 
-            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 2:
+            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
                 if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
                     os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get',self.checkpoint_index)
+                url = self._get_presigned_url('get',self.checkpoint_data)
 
                 origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
                 checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
@@ -303,33 +329,67 @@ class Client:
                     print ("Downloading %s" % self.checkpoint_data)
                     response = requests.get(url, stream=True)
                     total_length = response.headers.get('content-length')
-                    if total_length is None: # no content length header
-                        print("couldn't download checkpoint data file")
-                        self.checkpoint_data = None
-                    else:
-                        dl = 0
-                        total_length = int(total_length)
-                        for data in response.iter_content(chunk_size=4096):
-                            dl += len(data)
-                            handler.write(data)
-                            done = int(50 * dl / total_length)
-                            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
-                            sys.stdout.flush()
-                        print('Checkpoint Data downloaded')
+                    # if total_length is None: # no content length header
+                    #     print("couldn't download checkpoint data file")
+                    #     self.checkpoint_data = None
+                    # else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for data in response.iter_content(chunk_size=4096):
+                        dl += len(data)
+                        handler.write(data)
+                        done = int(50 * dl / total_length)
+                        sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
+                        sys.stdout.flush()
+                    print('Checkpoint Data downloaded')
             else:
                 origin_checkpoint_path = checkpoint_dir_old
                 if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])):
                     raise FileNotFoundError(".index file does not exists")
+                print("Last checkpoint index are on your filesystem, we'll use it..")
 
         except:
             print("no ckpt.data file found")
             self.checkpoint_data = None
 
-        if (self.checkpoint_index==None) or (self.checkpoint_data==None):
-            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
-            Upload checkpoints first")
-        else:
-            return origin_checkpoint_path
+        try:
+            # url = self._get_presigned_url('get',self.checkpoint_data)
+            if not self.training_id == 0:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+            else:
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+
+            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
+                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
+                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
+                url = self._get_presigned_url('get',self.config_file)
+
+                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
+                config_file = os.path.join(origin_checkpoint_path,self.config_file.split('/')[-1])
+                with open(checkpoint_file, 'wb') as handler:
+                    print ("Downloading %s" % self.config_file)
+                    response = requests.get(url, stream=True)
+                    total_length = response.headers.get('content-length')
+                    dl = 0
+                    total_length = int(total_length)
+                    for data in response.iter_content(chunk_size=4096):
+                        dl += len(data)
+                        handler.write(data)
+                        done = int(50 * dl / total_length)
+                        sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
+                        sys.stdout.flush()
+                        print('Config downloaded')
+            else:
+                origin_checkpoint_path = checkpoint_dir_old
+                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.config_file.split('/')[-1])):
+                    raise FileNotFoundError(".config file does not exists")
+                print("Last checkpoint index are on your filesystem, we'll use it..")
+
+        except:
+            print("no ckpt.data file found")
+            self.checkpoint_data = None
+
+        return origin_checkpoint_path
 
     def dl_annotations(self, option="train"):
         """ Pull all the annotations made on Picsell.ia Platform for your project.
@@ -581,13 +641,27 @@ class Client:
             raise ResourceNotFoundError("No directory found, please call init_model() function first")
 
 
-    def send_labelmap(self):
+    def send_labelmap(self, label_path=None):
         """Attach to network, it allow nicer results visualisation on hub playground
         """
 
-        if not hasattr(self, "label_map"):
+        if label_path is not None:
+            if not os.path.isfile(label_path):
+                raise FileNotFoundError("label map @ %s doesn't exists" % label_path)
+            with open(label_path, 'r') as f:
+                label_map = json.load(f)
+            label = {}
+            for k,v in label_map.items():
+                if len(k) < 3 and not all(map(str.isdigit, k)):
+                    label[v] = k
+
+        if not hasattr(self, "label_map") and label_path is None:
             raise ValueError("Please Generate label map first")
-        to_send = {"token": self.token, "labels": self.label_map, "network_id": self.network_id}
+
+        if label_path is not None:
+            to_send = {"token": self.token, "labels": label, "network_id": self.network_id}
+        else:
+            to_send = {"token": self.token, "labels": self.label_map, "network_id": self.network_id}
 
         try:
             r = requests.get(self.host + 'attach_labels', data=json.dumps(to_send))
@@ -600,6 +674,7 @@ class Client:
     def _get_presigned_url(self,method,object_name):
         try:
             to_send = {"token": self.token, "object_name": object_name}
+            print(to_send)
             if method=='post':
                 r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send))
             if method=='get':
@@ -735,7 +810,7 @@ class Client:
     #
     #     print("Weights pulled to your machine ...")
 
-    def send_logs(self, logs):
+    def send_logs(self, logs=None, logs_path=None):
         """Send training logs to Picsell.ia Platform
 
         Args:
@@ -748,6 +823,15 @@ class Client:
 
         if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
+
+        if logs_path is not None:
+            if not os.path.isfile(logs_path):
+                raise FileNotFoundError("Logs file not found")
+            with open(logs_path, 'r') as f:
+                logs = json.load(f)
+
+        if logs is None and logs_path is None:
+            raise ResourceNotFoundError("No log dict or path to logs .json given")
 
         try:
             to_send = {"token": self.token, "training_id": self.training_id, "logs": logs,  "network_id": self.network_id}
@@ -762,7 +846,7 @@ class Client:
             raise NetworkError("Could not connect to Picsell.ia Server")
 
 
-    def send_examples(self,id=None):
+    def send_examples(self,id=None, example_path_list=None):
         """Send Visual results to Picsell.ia Platform
 
         Args:
@@ -773,14 +857,15 @@ class Client:
             ResourceNotFoundError:
 
         """
-        if id is None:
+        if id is None and example_path_list is None:
             try:
                 results_dir = self.results_dir
                 list_img = os.listdir(results_dir)
                 assert len(list_img) != 0, 'No example have been created'
             except:
                 raise ResourceNotFoundError("You didn't init_model(), please call this before sending examples")
-        else:
+
+        elif id is not None and example_path_list is None:
             base_dir = '{}/{}/'.format(self.project_id,self.network_id)
             if str(id) in os.listdir(base_dir):
                 results_dir = os.path.join(base_dir,str(id)+'/results')
@@ -789,12 +874,27 @@ class Client:
             else:
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
                     os.path.join(base_dir,str(id)+'/results'))
+
+        elif (id is None and example_path_list is not None) or (id is not None and example_path_list is not None):
+            for file in example_path_list:
+                if not os.path.isfile(file):
+                    raise FileNotFoundError("file not found @ %s" % file)
+            list_img = example_path_list
+            results_dir = ""
+
+
         object_name_list = []
         for img_path in list_img:
             file_path = os.path.join(results_dir,img_path)
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("Can't locate file @ %s" % (file_path))
-            OBJECT_NAME = file_path
+            if id is None and example_path_list is not None:
+                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(self.training_id), "results",file_path.split('/')[-1])
+            elif id is not None and example_path_list is not None:
+                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(id), "results",file_path.split('/')[-1])
+            else:
+                OBJECT_NAME  = file_path
+
             response =self._get_presigned_url('post',OBJECT_NAME)
             to_send = {"token": self.token, "object_name": OBJECT_NAME}
 
@@ -848,7 +948,7 @@ class Client:
 
             print("Your exported model have been uploaded successfully to our cloud.")
 
-    def send_checkpoints(self,index_path=None,data_path=None):
+    def send_checkpoints(self,index_path=None,data_path=None, config_path=None):
 
         """Send frozen graph for inference to Picsell.ia Platform
 
@@ -864,18 +964,26 @@ class Client:
         max_size = 5 * 1024 * 1024
         urls = []
         file_list = os.listdir(self.checkpoint_dir)
-        if (index_path is not None) and (data_path is not None):
+        if (index_path is not None) and (data_path is not None) and (config_path is not None):
             if not os.path.isfile(index_path):
                 raise FileNotFoundError("{}: no such file".format(index_path))
             if not os.path.isfile(data_path):
                 raise FileNotFoundError("{}: no such file".format(data_path))
-            index_name = index_path.split('/')[-1]
-            ckpt_index_object = os.path.join(self.checkpoint_dir,index_name)
+            if not os.path.isfile(config_path):
+                raise FileNotFoundError("{}: no such file".format(config_path))
 
-            ckpt_data_object = os.path.join(self.checkpoint_dir,data_path)
+            # index_name = index_path.split('/')[-1]
+            # data_path = data_path.split('/')[-1]
+            # config_path = config_path.split('/')[-1]
+
+            ckpt_index_object = os.path.join(self.checkpoint_dir,index_path.split('/')[-1])
+            ckpt_data_object = os.path.join(self.checkpoint_dir,data_path.split('/')[-1])
             self.OBJECT_NAME = ckpt_data_object
+            if self.project_type != "classification":
+                config_object = os.path.join(self.checkpoint_dir,config_path.split('/')[-1])
 
-        elif (index_path is None) and (data_path is None):
+
+        elif (index_path is None) and (data_path is None) and (config_path is None):
             ckpt_id = max([int(p.split('-')[1].split('.')[0]) for p in file_list if 'index' in p])
             ckpt_index = "model.ckpt-{}.index".format(str(ckpt_id))
             ckpt_index_object = os.path.join(self.checkpoint_dir,ckpt_index)
@@ -886,18 +994,28 @@ class Client:
             ckpt_data_object = os.path.join(self.checkpoint_dir,ckpt_data)
             self.OBJECT_NAME = ckpt_data_object
             data_path = ckpt_data_object
+            if self.project_type != "classification":
+                if not os.path.isfile(os.path.join(self.checkpoint_dir, "pipeline.config")):
+                    raise FileNotFoundError("No config file found")
+                config_object = os.path.join(self.checkpoint_dir, "pipeline.config")
+                config_path = config_object
         else:
-            raise ValueError("checkpoints' index and data file must be sent together to ensure \
+            raise ValueError("checkpoints' index and data  and config files must be sent together to ensure \
                               compatibility")
 
         self.send_checkpoint_index(index_path,ckpt_index_object)
         print("Checkpoint index saved")
+
+        if self.project_type != "classification":
+            self.send_config_file(config_path, config_object)
+        print("Config file saved")
+
         self._init_multipart()
         parts = self._upload_part(data_path)
 
-        if self._complete_part_upload(parts,ckpt_data_object,'checkpoint'):
+        if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
 
-            print("Your exported model have been uploaded successfully to our cloud.")
+            print("Your index checkpoint have been uploaded successfully to our cloud.")
 
 
     def send_checkpoint_index(self,filename,object_name):
@@ -915,7 +1033,24 @@ class Client:
                     print(r.text)
                     raise ValueError("Errors.")
         except:
-            raise NetworkError("Could not upload examples to s3")
+            raise NetworkError("Could not upload checkpoint to s3")
+
+    def send_config_file(self,filename,object_name):
+        response = self._get_presigned_url('post',object_name)
+        try:
+            with open(filename, 'rb') as f:
+                files = {'file': (filename, f)}
+                http_response = requests.post(response['url'], data=response['fields'], files=files)
+                print('http:',http_response.status_code)
+            if http_response.status_code == 204:
+                index_info = {"token": self.token, "object_name": object_name,
+                            "network_id": self.network_id}
+                r = requests.post(self.host + 'post_config', data=json.dumps(index_info))
+                if r.status_code != 201:
+                    print(r.text)
+                    raise ValueError("Errors.")
+        except:
+            raise NetworkError("Could not upload config to s3")
 
 
     def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
@@ -1142,7 +1277,99 @@ class Client:
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
+
+    def upload_and_create(self):
+        print("Welcome to the Complete experiment uploader of Picsell.ia\nSimple GUI to push a model to the community\n")
+        model_name = input("1) Select a the desired name of the model you're about to upload\n")
+        self.init_model(model_name)
+
+        if self.project_type != "classification":
+            print("2) Let's upload  3 important files..\n First, please select the latest .data, .index and pipeline.config files\n")
+            file_list = easygui.fileopenbox(filetypes=["*.index","*.data*", "*.config"], multiple=True)
+        else:
+            print("2) Let's upload  2 important files..\n First, please select the latest .data, .index files\n")
+            file_list = easygui.fileopenbox(filetypes=["*.index","*.data*"], multiple=True)
+
+        index_path = ""
+        data_path = ""
+        config_path=""
+        for f in file_list:
+            if "index" in f:
+                ckpt_index_object = os.path.join(self.checkpoint_dir,f.split('/')[-1])
+                index_path = f
+            elif "data" in f:
+                ckpt_data_object = os.path.join(self.checkpoint_dir,f.split('/')[-1])
+                self.OBJECT_NAME = ckpt_data_object
+                data_path = f
+            if self.project_type != "classification":
+                if "pipeline" in f:
+                    config_path = f
+                    config_object = os.path.join(self.checkpoint_dir, "pipeline.config")
+
+        if index_path == "" or data_path == "":
+            raise FileNotFoundError("The selected file are not the .data and .index files")
+
+        if config_path == "" and self.project_type != "classification":
+            raise FileNotFoundError("No config file found")
+
+
+
+        print("We will upload files:")
+        print("\n ", index_path)
+        print("\n ", data_path)
+        if self.project_type != "classification":
+            print("\n ", config_path)
+
+
+        self.send_checkpoint_index(index_path,ckpt_index_object)
+        print("Checkpoint index saved")
+
+        if self.project_type != "classification":
+            self.send_config_file(config_path, config_object)
+        print("Config file saved")
+
+        self._init_multipart()
+        parts = self._upload_part(data_path)
+
+        if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
+
+            print("Your index checkpoint have been uploaded successfully to our cloud.")
+
+        a = input("Do you have some training logs in json format to send ?(Y/N) ")
+        if a.lower() == "y":
+            json_path = easygui.fileopenbox(filetypes="*.json")
+            self.send_logs(logs_path=json_path)
+
+        a = input("Do you have some visual examples to send ?(Y/N) ")
+        if a.lower() == 'y':
+            list_files = easygui.fileopenbox(filetypes=["*.png","*.jpg", "*.jpeg"], multiple=True)
+            if not len(list_files) == 0:
+                self.send_examples(example_path_list=list_files)
+
+        a = input("Do you have a json maping your label with your class ?(y/n) ")
+        if a.lower() =='y':
+            print("Please choose your json file")
+            json_path = easygui.fileopenbox(filetypes="*.json")
+            self.send_labelmap(label_path=json_path)
+        print("Ok now, let's send your frozen graph to wrap it up")
+        model_path = easygui.fileopenbox(filetypes="*.pb")
+        if not model_path == "":
+            self.send_model(model_path)
+
+        print("Alright ! Your model is fully uploaded to our hub !")
+
+
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
-    client = Client(token="8054234f-408e-4aee-ad4f-5346ff572d46", host="https://backstage.picsellia.com/sdk/", png_dir='/home/batman/Documents/PicsellAL/PennFudanPed/PNGImages')
-    client.init_model("first_model")
-    client.dl_annotations()
+    client = Client(token="6c771580-6909-4d42-aefc-14447477b28f", png_dir='/home/batman/Documents/PicsellAL/PennFudanPed/PNGImages')
+    client.init_model("test_fin")
+    #client.dl_annotations()
+    label_path = easygui.fileopenbox()
+    client.send_labelmap(label_path=label_path)
