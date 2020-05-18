@@ -837,14 +837,47 @@ class Client:
             to_send = {"token": self.token, "training_id": self.training_id, "logs": logs,  "network_id": self.network_id}
             r = requests.post(self.host + 'post_logs', data=json.dumps(to_send))
             if r.status_code != 201:
-                raise NetworkError("The logs have not been send because %s" %(r.text))
+                raise NetworkError("The logs have not been sent because %s" %(r.text))
 
             print(
-                "Training logs have been send to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
+                "Training logs have been sent to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
 
         except:
             raise NetworkError("Could not connect to Picsell.ia Server")
+    
+    def send_metrics(self, metrics=None, metrics_path=None):
+        """Send evalutation metrics to Picsell.ia Platform
 
+        Args:
+            metrics (dict): Dict of the evaluation metrics (Please find Getting Started Picsellia Docs to see how to get it)
+        Raises:
+            NetworkError: If it impossible to initialize upload
+            ResourceNotFoundError: If no saved_model saved
+
+        """        
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "token"):
+            raise ResourceNotFoundError("Please initialize model with init_model()")
+
+        if metrics_path is not None:
+            if not os.path.isfile(metrics_path):
+                raise FileNotFoundError("Metrics file not found")
+            with open(metrics_path, 'r') as f:
+                metrics = json.load(f)
+
+        if metrics is None and metrics_path is None:
+            raise ResourceNotFoundError("No metrics dict or path to metrics.json given")
+
+        try:
+            to_send = {"token": self.token, "training_id": self.training_id, "metrics": metrics,  "network_id": self.network_id}
+            r = requests.post(self.host + 'post_metrics', data=json.dumps(to_send))
+            if r.status_code != 201:
+                raise NetworkError("The evaluation metrics have not been sent because %s" %(r.text))
+
+            print(
+                "Evaluation metrics have been sent to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
+
+        except:
+            raise NetworkError("Could not connect to Picsell.ia Server")
 
     def send_examples(self,id=None, example_path_list=None):
         """Send Visual results to Picsell.ia Platform
