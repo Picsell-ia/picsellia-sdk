@@ -731,26 +731,23 @@ class Client:
     def _get_presigned_url(self,method,object_name, bucket_name=None):
        # try:
         if bucket_name is None:
-            to_send = {"project_token": self.project_token, "object_name": object_name}
-            print(to_send)
+            to_send = {"object_name": object_name}
             if method=='post':
                 r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
             if method=='get':
                 r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 200:
-                print(r.text)
                 raise ValueError("Errors.")
             http_response = r.json()["url"]
             return http_response
         else:
-            to_send = {"project_token": self.project_token, "object_name": object_name, "bucket_name": bucket_name}
-            print(to_send)
+            to_send = {"object_name": object_name, "bucket_name": bucket_name}
 
             if method=='post':
                 r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-                print(r)
+            if method=='get':
+                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 200:
-                print(r.text)
                 raise ValueError("Errors.")
             http_response = r.json()["url"]
             return http_response
@@ -1274,7 +1271,112 @@ class Client:
                 yield (width, height, filename, encoded_jpg, image_format,
                     classes_text, classes)
 
-    def upload_annotations(self, annotations, format='picsellia'):
+    def get_dataset_list(self):
+        r = requests.get(self.host + 'get_dataset_list', headers=self.auth)
+        dataset_names = r.json()["dataset_names"]
+        for e in dataset_names:
+            print("\t",e)
+
+    def create_dataset(self,dataset_name):
+        if not isinstance(dataset_name, str):
+            raise ValueError('dataset_name must be a string not {}'
+                .format(type(dataset_name)))
+        dataset_info = {"dataset_name": dataset_name}
+        r = requests.get(self.host + 'create_dataset', data=json.dumps(dataset_info), headers=self.auth)
+        new_dataset = r.json()["new_dataset"]
+        if not new_dataset:
+            dataset_names = r.json()["dataset_names"]
+            raise ValueError("You already have a dataset with this name, \
+                please pick another one")
+        else:
+            dataset_id = r.json()["dataset_id"]
+            print("Dataset {} created successfully".format(dataset_name))
+            return dataset_id
+
+    def send_dataset_thumbnail(self,dataset_name,img_path):
+        if not isinstance(dataset_name, str):
+            raise ValueError('dataset_name must be a string not {}'
+                .format(type(dataset_name)))
+        data = {
+            "dataset_name":dataset_name
+        }
+        with open(img_path, 'rb') as f:
+            files = {'file': (img_path, f)}
+            http_response = requests.post(self.host + 'send_dataset_thumbnail', data=data, files=files, headers=self.auth)
+            if http_response.status_code == 200:
+                print(http_response.text)
+            else:
+                raise NetworkError("Could not upload thumbnail")
+
+    def create_and_upload_dataset(self,dataset_name,path_to_images):
+        """ Create a dataset and upload the images to Picsell.ia
+
+        Args :
+            dataset_name (str)
+            path_to_images (str)
+
+        Raises:
+            ValueError
+            NetworkError: If impossible to upload to Picsell.ia server
+
+        """
+        if not isinstance(dataset_name, str):
+            raise ValueError('dataset_name must be a string not {}'
+                .format(type(dataset_name)))
+
+        if not isinstance(path_to_images, str):
+            raise ValueError('path_to_images must be a string not {}'
+                .format(type(path_to_images)))
+
+        if not os.path.isdir(path_to_images):
+            raise FileNotFoundError('{} is not a directory'
+                .format(path_to_images))
+
+        dataset_id = self.create_dataset(dataset_name)
+        print("Dataset created, starting file upload...")
+        image_list = os.listdir(path_to_images)
+        thumb_path = os.path.join(path_to_images,image_list[0])
+        self.send_dataset_thumbnail(dataset_name,thumb_path)
+        if len(image_list)>0:
+            object_name_list = []
+            image_name_list = []
+            sizes_list = []
+            for img_path in image_list:
+                file_path = os.path.join(path_to_images,img_path)
+                if not os.path.isfile(file_path):
+                    raise FileNotFoundError("Can't locate file @ %s" % (file_path))
+                OBJECT_NAME = os.path.join(dataset_id,img_path)
+
+                response =self._get_presigned_url(method='post',object_name=OBJECT_NAME,bucket_name='picsell-ui')
+                to_send = {"object_name": OBJECT_NAME}
+
+                try:
+                    im = Image.open(file_path)
+                    width, height = im.size
+                    with open(file_path, 'rb') as f:
+                        files = {'file': (OBJECT_NAME, f)}
+                        http_response = requests.post(response['url'], data=response['fields'], files=files)
+                        print('http:',http_response.status_code)
+                    if http_response.status_code == 204:
+                        object_name_list.append(OBJECT_NAME)
+                        image_name_list.append(img_path)
+                        sizes_list.append([width,height])
+                except:
+                    raise NetworkError("Could not upload examples to s3")
+
+            to_send2 = {"dataset_id": dataset_id,
+                        "object_list": object_name_list, "image_list": image_list,
+                        "sizes_list": sizes_list}
+            try:
+                r = requests.post(self.host + 'create_pictures_for_dataset', data=json.dumps(to_send2), headers=self.auth)
+                if r.status_code != 200:
+                    raise ValueError("Errors.")
+                print("A snapshot of results has been saved to the platform")
+            except:
+                raise NetworkError("Could not upload to Picsell.ia Backend")
+
+
+    def upload_annotations(self, annotations,dataset_name,project_token, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
         Please find in our Documentation the annotations format acceoted to upload
@@ -1367,9 +1469,10 @@ class Client:
             annotation_list = annotations["annotations"]
 
         to_send = {
-            "project_token": self.project_token,
             'format': format,
-            'annotations': annotations
+            'annotations': annotations,
+            'dataset_name': dataset_name,
+            'project_token': self.project_token
         }
 
         try:
