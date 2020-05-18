@@ -294,7 +294,7 @@ class Client:
         if not self.training_id == 0:
             checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
         else:
-            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
         if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
             if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
@@ -336,7 +336,7 @@ class Client:
             if not self.training_id == 0:
                 checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
             else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
             if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
                 if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
@@ -377,7 +377,7 @@ class Client:
             if not self.training_id == 0:
                 checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
             else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
             if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
                 if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
@@ -620,9 +620,10 @@ class Client:
 
             if not os.path.isfile(pic_name):
                 try:
-                    img_data = requests.get(info["signed_url"]).content
+                    response = requests.get(info["signed_url"], stream=True)
                     with open(pic_name, 'wb') as handler:
-                        handler.write(img_data)
+                        for data in response.iter_content(chunk_size=4096):
+                            handler.write(data)
                     cnt += 1
                 except:
                     raise ResourceNotFoundError("Image %s can't be downloaded" % (pic_name))
@@ -1470,8 +1471,8 @@ class Client:
 
 
 if __name__ == '__main__':
-    client = Client(api_token="bdcfce35e0ff716d76a1bd549cc0804c19cb0f23", host="http://localhost:8000/sdk/")
-    client.init_project(project_token="bf6e4395-01ba-40a3-81a6-3e5666490128")
+    client = Client(api_token="03a0df321ccf19fad8eff1439e2bd996c6363d47", host="https://backstage.picsellia.com/sdk/")
+    client.init_project(project_token="d8e83b34-352e-41b1-9329-03a791f8d4ef")
     client.init_model("prout2")
     client.dl_annotations()
     client.local_pic_save()
