@@ -672,7 +672,7 @@ class Client:
         if not hasattr(self, "dict_annotations") or not hasattr(self, "base_dir"):
             raise ResourceNotFoundError("Please init model and dl_annotation()")
 
-        self.label_path = '{}/label_map.pbtxt'.format(self.base_dir)
+        self.label_path = os.path.join(self.base_dir, "label_map.pbtxt")
 
 
         if not "categories" in self.dict_annotations.keys():
