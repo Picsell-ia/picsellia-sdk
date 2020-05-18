@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from picsellia.exceptions import *
 import sys
 import easygui
-
+import random
 class Client:
     """
     The Picsell.ia Client contains info necessary for connecting to the Picsell.ia Platform.
@@ -40,11 +40,11 @@ class Client:
 
         self.auth = { "Authorization" : "Bearer " + api_token}
         self.host = host
-        #try:
-        r = requests.get(self.host + 'ping', headers=self.auth)
-        #except:
-        #    raise NetworkError(
-             #   "Server is not responding, please check your host or Picsell.ia server status on twitter")
+        try:
+            r = requests.get(self.host + 'ping', headers=self.auth)
+        except:
+           raise NetworkError(
+               "Server is not responding, please check your host or Picsell.ia server status on twitter")
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
 
@@ -515,7 +515,7 @@ class Client:
 
 
 
-        list_im = np.linspace(0,len(self.dict_annotations['images']),len(self.dict_annotations['images']))
+        list_im = np.linspace(0,len(self.dict_annotations['images'])-1,len(self.dict_annotations['images'])).astype('int')
         random.shuffle(list_im)
         nb_im = int(prop*len(self.dict_annotations['images']))
         train_list = list_im[:nb_im]
@@ -1472,8 +1472,9 @@ class Client:
 if __name__ == '__main__':
     client = Client(api_token="bdcfce35e0ff716d76a1bd549cc0804c19cb0f23", host="http://localhost:8000/sdk/")
     client.init_project(project_token="bf6e4395-01ba-40a3-81a6-3e5666490128")
-    #client.init_model("prout2")
-    #client.dl_annotations()
+    client.init_model("prout2")
+    client.dl_annotations()
+    client.local_pic_save()
     #label_path = easygui.fileopenbox()
     #client.send_labelmap(label_path=label_path)
-    client.upload_and_create()
+    #client.upload_and_create()
