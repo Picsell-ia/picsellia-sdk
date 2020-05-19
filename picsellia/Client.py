@@ -191,13 +191,7 @@ class Client:
         if not hasattr(self, "custom"):
             self.custom = False
 
-        if self.project_infos is None:
 
-            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
-            print("The further work will be stored as training {}".format(self.training_id))
-            self.dict_annotations = {}
-            self.setup_dirs()
-            return None
 
         elif not hasattr(self, "custom"):
             print("jj")
@@ -285,14 +279,19 @@ class Client:
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
 
-    def dl_checkpoints(self):
+    def dl_checkpoints(self, checkpoint_path=None):
 
+        if checkpoint_path is not None:
+            if not os.path.isdit(checkpoint_path):
+                raise ResourceNotFoundError("No directory @ %s" % checkpoint_path)
+
+            return checkpoint_path
         if (self.checkpoint_index==None) or (self.checkpoint_data==None):
             raise ResourceNotFoundError("There are no existing checkpoints for this model. \
             Upload checkpoints first")
         # try:
         if not self.training_id == 0:
-            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
         else:
             checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
@@ -300,7 +299,7 @@ class Client:
             if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
                 os.makedirs(os.path.join(self.base_dir,'origin_checkpoints'))
             print("iciiiiiii" ,self.checkpoint_index)
-            url = self._get_presigned_url('get',self.checkpoint_index)
+            url = self._get_presigned_url('get', self.checkpoint_index, bucket_name="picsellia-private-model-storage")
 
             origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
             checkpoint_file = os.path.join(origin_checkpoint_path, self.checkpoint_index.split('/')[-1])
@@ -334,14 +333,14 @@ class Client:
         try:
             # url = self._get_presigned_url('get',self.checkpoint_data)
             if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
             else:
                 checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
             if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
                 if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
                     os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get',self.checkpoint_data)
+                url = self._get_presigned_url('get',self.checkpoint_data, bucket_name="picsellia-private-model-storage")
 
                 origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
                 checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
@@ -375,14 +374,14 @@ class Client:
         try:
             # url = self._get_presigned_url('get',self.checkpoint_data)
             if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1),"origin_checkpoints")
+                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
             else:
                 checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
             if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
                 if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
                     os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get', self.config_file)
+                url = self._get_presigned_url('get', self.config_file, bucket_name="picsellia-private-model-storage")
 
                 origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
                 config_file = os.path.join(origin_checkpoint_path,self.config_file.split('/')[-1])
@@ -437,6 +436,45 @@ class Client:
 
         except:
             raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+
+    def dl_latest_saved_model(self, path_to_save=None):
+
+        if path_to_save is None:
+            raise InvalidQueryError("Please precise where you want to save .pb file.")
+        if not os.path.isdir(path_to_save):
+            os.makedirs(path_to_save)
+        if not hasattr(self, "training_id") :
+            raise ResourceNotFoundError("Please init model first")
+
+        if not hasattr(self, "auth") :
+            raise ResourceNotFoundError("Please init client first")
+
+        to_send = {"project_token": self.project_token, "network_id": self.training_id}
+
+        try:
+            r = requests.get(self.host + 'get_saved_model_object_name', data=json.dumps(to_send), headers=self.auth)
+        except:
+            raise NetworkError("Could not connect to Picsell.ia Backend")
+
+        object_name = r.json()["object_name"]
+        if object_name == 0:
+            raise ValueError("There is no saved model on our backend for this project")
+
+        url = self._get_presigned_url("get", object_name, bucket_name="picsellia-private-model-storage")
+
+        with open(os.path.join(path_to_save,'saved_model.pb'), 'wb') as handler:
+            print("Downloading exported model..")
+            response = requests.get(url, stream=True)
+            total_length = response.headers.get('content-length')
+            dl = 0
+            total_length = int(total_length)
+            for data in response.iter_content(chunk_size=4096):
+                dl += len(data)
+                handler.write(data)
+                done = int(50 * dl / total_length)
+                sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
+                sys.stdout.flush()
+                print('Exported model downloaded @ %s' % path_to_save)
 
     def _train_valid_split_obj_detection(self, prop=0.8):
         """Perform Optimized train test split for Object Detection.
@@ -730,6 +768,8 @@ class Client:
 
     def _get_presigned_url(self,method,object_name, bucket_name=None):
        # try:
+        print(method)
+        print(object_name)
         if bucket_name is None:
             to_send = {"object_name": object_name}
             if method=='post':
@@ -1119,15 +1159,15 @@ class Client:
 
 
     def send_checkpoint_index(self,filename,object_name):
-        response = self._get_presigned_url('post', object_name, bucket_name="picsellia-private-model-storage")
+        response = self._get_presigned_url(method='post', object_name=object_name, bucket_name="picsellia-private-model-storage")
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
                 http_response = requests.post(response['url'], data=response['fields'], files=files)
-                print('http:',http_response.status_code)
+                print('http:', http_response.status_code)
             if http_response.status_code == 204:
                 index_info = {"project_token": self.project_token, "object_name": object_name,
-                            "network_id": self.network_id}
+                              "network_id": self.network_id}
                 r = requests.post(self.host + 'post_checkpoint_index', data=json.dumps(index_info), headers=self.auth)
                 if r.status_code != 201:
                     print(r.text)
@@ -1575,10 +1615,11 @@ class Client:
 
 if __name__ == '__main__':
     client = Client(api_token="03a0df321ccf19fad8eff1439e2bd996c6363d47", host="https://backstage.picsellia.com/sdk/")
-    client.init_project(project_token="d8e83b34-352e-41b1-9329-03a791f8d4ef")
-    client.init_model("prout2")
-    client.dl_annotations()
-    client.local_pic_save()
+    client.init_project(project_token="d3652cdb-c728-41de-89b4-939623d84dbc")
+    #client.init_model("car_bruises_mask_rcnn")
+    #client.dl_annotations()
+    #client.local_pic_save()
+    #client.dl_latest_saved_model('models/')
     #label_path = easygui.fileopenbox()
     #client.send_labelmap(label_path=label_path)
-    #client.upload_and_create()
+    client.upload_and_create()
