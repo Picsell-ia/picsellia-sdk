@@ -188,48 +188,23 @@ class Client:
         self.training_id = r.json()["training_id"]
         self.base_dir = os.path.join(self.project_id,self.network_id,str(self.training_id))
 
-        if not hasattr(self, "custom"):
-            self.custom = False
-
-
-
-        elif not hasattr(self, "custom"):
-            print("jj")
-            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
-            print("The further work will be stored as training {}".format(self.training_id))
-            self.dict_annotations = {}
-            self.setup_dirs()
-            return None
-
-        elif self.custom:
-            print('kk')
-            print("Your working with a model not attached to your project or without any savings yet, linking model to project now..")
-            print("The further work will be stored as training {}".format(self.training_id))
-            self.dict_annotations = {}
-            self.setup_dirs()
-            return None
-
-        else:
-            try:
-                self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-                self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-                self.config_file = r.json()["checkpoints"]["config_file"]
-            except:
-                self.dict_annotations = {}
-                self.setup_dirs()
-                return None
-                # raise ResourceNotFoundError("No checkpoint present on our backend, you should restart clean by deleting your network on the platform")
-
+        try:
             self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
             self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
             self.config_file = r.json()["checkpoints"]["config_file"]
-            print(self.checkpoint_index)
+            
             self.model_selected = self.dl_checkpoints()
             self.dict_annotations = {}
             self.setup_dirs()
             print("It's the training number {} for this project".format(self.training_id))
             return self.model_selected
 
+        except:
+            self.dict_annotations = {}
+            self.setup_dirs()
+            print("You are working with you own local model")
+            return None
+            # raise ResourceNotFoundError("No checkpoint present on our backend, you should restart clean by deleting your network on the platform")
 
 
 
