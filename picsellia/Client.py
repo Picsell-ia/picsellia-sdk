@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-
+import io
 import picsellia.Utils as utils
 import easygui
 import requests
@@ -529,7 +529,7 @@ class Client:
         self.eval_list = []
         self.train_list_id = []
         self.eval_list_id = []
-        self.index_url = utils.train_valid_split_obj_simple(self.dict_annotations, prop)_
+        self.index_url = utils.train_valid_split_obj_simple(self.dict_annotations, prop)
 
         total_length = len(self.dict_annotations["images"])
         for info, idx in zip(self.dict_annotations["images"], self.index_url):
@@ -545,7 +545,7 @@ class Client:
                                                                                   len(self.eval_list_id)))
 
         label_train, label_test, cate = utils.get_labels_repartition_obj_detection(self.dict_annotations, self.index_url)
-        
+
         to_send = {"project_token": self.project_token,
                    "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
                    "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
