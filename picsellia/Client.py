@@ -140,6 +140,7 @@ class Client:
 
         self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
+        self.network_name = model_name
         self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
         self.dict_annotations = {}
         self.setup_dirs()
@@ -191,30 +192,20 @@ class Client:
             raise AuthenticationError(
                 'The project_token provided does not match any of the known project_token for profile.')
 
-        self.network_id = r.json()["network_id"]
-        self.training_id = r.json()["training_id"]
-        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        response = r.json()
+        self.network_id = response["network_id"]
+        self.training_id = response["training_id"]
+        self.base_dir = os.path.join(self.project_name, self.network_name, str(self.training_id))
         self.dict_annotations = {}
+        self.setup_dirs()
+        self.model_selected = self.dl_checkpoints(response)
+        print("You already have some checkpoints on your machine, we'll start training from there.")
+        return self.model_selected
 
-        try:
-
-            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-            self.config_file = r.json()["checkpoints"]["config_file"]
-            self.setup_dirs()
-            self.model_selected = self.dl_checkpoints()
-            print("You already have some checkpoints on your machine, we'll start training from there.")
-            return self.model_selected
-
-        except:
-            self.setup_dirs()
-            self.model_selected = None
-            print("You are working with an attached network, but no training checkpoint were found")
-            return self.model_selected
 
     def setup_dirs(self):
 
-        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        self.base_dir = os.path.join(self.project_name, self.network_name, str(self.training_id))
         self.metrics_dir = os.path.join(self.base_dir, 'metrics')
         self.checkpoint_dir = os.path.join(self.base_dir, 'checkpoint')
         self.record_dir = os.path.join(self.base_dir, 'records')
@@ -222,12 +213,12 @@ class Client:
         self.results_dir = os.path.join(self.base_dir, 'results')
         self.exported_model = os.path.join(self.base_dir + 'exported_model')
 
-        if not os.path.isdir(self.project_id):
+        if not os.path.isdir(self.project_name):
             print("First time using Picsell.ia on this project, initializing directories ...")
-            os.mkdir(self.project_id)
+            os.mkdir(self.project_name)
 
-        if not os.path.isdir(os.path.join(self.project_id, self.network_id)):
-            os.mkdir(os.path.join(self.project_id, self.network_id))
+        if not os.path.isdir(os.path.join(self.project_name, self.network_name)):
+            os.mkdir(os.path.join(self.project_name, self.network_name))
 
         if not os.path.isdir(self.base_dir):
             print("Creating directory for project {}".format(self.base_dir))
@@ -257,20 +248,40 @@ class Client:
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
 
-    def dl_checkpoints(self, checkpoint_path=None):
+    def dl_checkpoints(self, response, checkpoint_path=None):
 
         if checkpoint_path is not None:
             if not os.path.isdir(checkpoint_path):
                 raise ResourceNotFoundError("No directory @ %s" % checkpoint_path)
             return checkpoint_path
 
+
+
+        if "index_object_name" in response["checkpoints"].keys():
+            self.checkpoint_index =  response["checkpoints"]["index_object_name"]
+        else:
+            self.checkpoint_index = None
+
+        if "data_object_name" in response["checkpoints"].keys():
+            self.checkpoint_data =  response["checkpoints"]["data_object_name"]
+
+        else:
+            self.checkpoint_data = None
+
+        if "config_file" in response["checkpoints"].keys():
+            self.config_file =  response["checkpoints"]["config_file"]
+        else:
+            self.config_file = None
+
+
         if (self.checkpoint_index is None) or (self.checkpoint_data is None):
-            raise ResourceNotFoundError("There are no existing checkpoints for this model. \
-            Upload checkpoints first")
+            print("You are working with a Custom model")
+            return None
+
 
         # list all existing training id
 
-        list_training = os.listdir(os.path.join(self.project_id, self.network_id))
+        list_training = os.listdir(os.path.join(self.project_name, self.network_name))
         training_ids = sorted([int(e) for e in list_training], reverse=True)
         print("available training id , ", training_ids)
 
@@ -278,47 +289,38 @@ class Client:
         data_path = ""
         config_path = ""
         for id in training_ids:
-            path = os.path.join(self.project_id, self.network_id, str(id), "checkpoint")
+            path = os.path.join(self.project_name, self.network_name, str(id), "checkpoint")
             if utils.is_checkpoint(path, self.project_type):
-                a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+                a = 0
+                while (a not in ["y", "yes", "n", "no"]):
+                    a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+
                 if a.lower() == 'y' or a.lower()=='yes':
-                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                               self.network_id,
+                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
+                                                                                               self.network_name,
                                                                                                str(self.training_id),
                                                                                            "checkpoint"))
                     return path
-                elif a.lower() not in ["y", "yes", "n", "no"]:
-                    a = input("Please type y or n [y/n]" % (str(id)))
-                    if a.lower() == 'y' or a.lower()=='yes':
-                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                   self.network_id,
-                                                                                                   str(self.training_id),
-                                                                                               "checkpoint"))
-                        return path
 
                 else:
                     continue
 
             else:
-                path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
+                path_deep = os.path.join(self.project_name, self.network_name, str(id), "checkpoint", "origin")
 
                 if utils.is_checkpoint(path_deep, self.project_type):
+                    while (a not in ["y", "yes", "n", "no"]):
+                        a = input("Found original checkpoints files from training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+
                     if a.lower() == 'y' or a.lower()=='yes':
-                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                   self.network_id,
+                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
+                                                                                                   self.network_name,
                                                                                                    str(self.training_id),
                                                                                                "checkpoint"))
                         return path_deep
 
-                    elif a.lower() not in ["y", "yes", "n", "no"]:
-                        a = input("Please type y or n [y/n]" % (str(id)))
-                        if a.lower() == 'y' or a.lower()=='yes':
-                            print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                       self.network_id,
-                                                                                                       str(self.training_id),
-                                                                                                   "checkpoint"))
-                            return path_deep
-
+                    else:
+                        continue
                 else:
                     continue
 
@@ -663,9 +665,9 @@ class Client:
                 raise ResourceNotFoundError("You didn't init_model(), please call this before sending examples")
 
         elif id is not None and example_path_list is None:
-            base_dir = '{}/{}/'.format(self.project_id, self.network_id)
+            base_dir = os.path.join(self.project_name, self.network_name)
             if str(id) in os.listdir(base_dir):
-                results_dir = os.path.join(base_dir, str(id) + '/results')
+                results_dir = os.path.join(base_dir, str(id), 'results')
                 list_img = os.listdir(results_dir)
                 assert len(list_img) != 0, 'No example have been created'
             else:
