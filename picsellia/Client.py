@@ -309,7 +309,7 @@ class Client:
                                                                                                    str(self.training_id),
                                                                                                "checkpoint"))
                         return path_deep
-                        
+
                     elif a.lower() not in ["y", "yes", "n", "no"]:
                         a = input("Please type y or n [y/n]" % (str(id)))
                         if a.lower() == 'y' or a.lower()=='yes':
@@ -739,7 +739,7 @@ class Client:
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
         else:
-            file_path = '{}/{}/saved_model.pb'.format(self.exported_model)
+            file_path = os.path.join(self.exported_model, 'saved_model.pb')
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
