@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-
+import io
 import picsellia.Utils as utils
 import easygui
 import requests
@@ -44,6 +44,7 @@ class Client:
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
         self.supported_img_types = [".png", ".jpg", ".jpeg"]
+        self.label_path = ""
         print(
             "Welcome {}, Glad to have you back".format(
                 self.username))
@@ -280,12 +281,21 @@ class Client:
             path = os.path.join(self.project_id, self.network_id, str(id), "checkpoint")
             if utils.is_checkpoint(path, self.project_type):
                 a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
-                if a.lower() == 'y':
+                if a.lower() == 'y' or a.lower()=='yes':
                     print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
                                                                                                self.network_id,
                                                                                                str(self.training_id),
                                                                                            "checkpoint"))
                     return path
+                elif a.lower() not in ["y", "yes", "n", "no"]:
+                    a = input("Please type y or n [y/n]" % (str(id)))
+                    if a.lower() == 'y' or a.lower()=='yes':
+                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                                   self.network_id,
+                                                                                                   str(self.training_id),
+                                                                                               "checkpoint"))
+                        return path
+
                 else:
                     continue
 
@@ -293,14 +303,21 @@ class Client:
                 path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
 
                 if utils.is_checkpoint(path_deep, self.project_type):
-                    a = input("Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (str(id)))
-                    if a.lower() == 'y':
+                    if a.lower() == 'y' or a.lower()=='yes':
                         print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                   self.network_id,str(self.training_id),
-                                                                                                   "checkpoint"))
+                                                                                                   self.network_id,
+                                                                                                   str(self.training_id),
+                                                                                               "checkpoint"))
                         return path_deep
-                    else:
-                        continue
+
+                    elif a.lower() not in ["y", "yes", "n", "no"]:
+                        a = input("Please type y or n [y/n]" % (str(id)))
+                        if a.lower() == 'y' or a.lower()=='yes':
+                            print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                                       self.network_id,
+                                                                                                       str(self.training_id),
+                                                                                                   "checkpoint"))
+                            return path_deep
 
                 else:
                     continue
@@ -348,7 +365,7 @@ class Client:
                     dl += len(data)
                     handler.write(data)
                     done = int(50 * dl / total_length)
-                    print('Config downloaded')
+                print('Config downloaded')
 
         url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_name="picsellia-private-model-storage")
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_data.split('/')[-1])
@@ -468,10 +485,6 @@ class Client:
         if not "images" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
 
-        self.train_list = []
-        self.eval_list = []
-        self.train_list_id = []
-        self.eval_list_id = []
         cnt = 0
 
         print("Downloading PNG images to your machine ...")
@@ -486,13 +499,6 @@ class Client:
         for info, idx in zip(self.dict_annotations["images"], self.index_url):
 
             pic_name = os.path.join(self.png_dir, info['external_picture_url'])
-            if idx == 1:
-                self.train_list.append(pic_name)
-                self.train_list_id.append(info["internal_picture_id"])
-            else:
-                self.eval_list.append(pic_name)
-                self.eval_list_id.append(info["internal_picture_id"])
-
             if not os.path.isfile(pic_name):
                 try:
                     response = requests.get(info["signed_url"], stream=True)
@@ -503,17 +509,47 @@ class Client:
                 except:
                     print("Image %s can't be downloaded" % pic_name)
                     pass
+
             dl += 1
             done = int(50 * dl / total_length)
             sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
             sys.stdout.flush()
 
-        print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
-                                                                                  len(self.eval_list_id)))
+
         print("{} files were already on your machine".format(total_length - cnt))
         print(" {} PNG images have been downloaded to your machine".format(cnt))
 
-        print("Sending repartition to Picsell.ia backend")
+
+
+
+
+
+    def train_test_split(self, prop=0.8):
+
+        if not hasattr(self, "dict_annotations"):
+            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
+
+        if not "images" in self.dict_annotations.keys():
+            raise ResourceNotFoundError("Please run dl_annotation function first")
+
+        self.train_list = []
+        self.eval_list = []
+        self.train_list_id = []
+        self.eval_list_id = []
+        self.index_url = utils.train_valid_split_obj_simple(self.dict_annotations, prop)
+
+        total_length = len(self.dict_annotations["images"])
+        for info, idx in zip(self.dict_annotations["images"], self.index_url):
+            pic_name = os.path.join(self.png_dir, info['external_picture_url'])
+            if idx == 1:
+                self.train_list.append(pic_name)
+                self.train_list_id.append(info["internal_picture_id"])
+            else:
+                self.eval_list.append(pic_name)
+                self.eval_list_id.append(info["internal_picture_id"])
+
+        print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
+                                                                                  len(self.eval_list_id)))
 
         label_train, label_test, cate = utils.get_labels_repartition_obj_detection(self.dict_annotations, self.index_url)
 
@@ -530,6 +566,7 @@ class Client:
 
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
+
 
     def send_logs(self, logs=None, logs_path=None):
         """Send training logs to Picsell.ia Platform
@@ -702,7 +739,11 @@ class Client:
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
         else:
+<<<<<<< HEAD
             file_path = '{}/{}/saved_model.pb'.format(self.exported_model_dir)
+=======
+            file_path = os.path.join(self.exported_model, 'saved_model.pb')
+>>>>>>> 64fa38f54466f0620c5475779b65ecff5421cb27
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
@@ -1221,14 +1262,6 @@ class Client:
         except:
             raise NetworkError("Impossible to get an url..")
 
-class FileProcessor(Client):
-    """
-        The Picsell.ia FileProcessor
-        It provides top-level functions to :
-                                            - format data for training
-
-        """
-
     def generate_labelmap(self):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
         ----------------------------------------------------------
@@ -1275,7 +1308,8 @@ class FileProcessor(Client):
 
         self.label_map = labels_Network
 
-        return self.label_path
+
+
 
     def send_labelmap(self, label_path=None):
         """Attach to network, it allow nicer results visualisation on hub playground
