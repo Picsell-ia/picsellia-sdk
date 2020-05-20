@@ -195,21 +195,21 @@ class Client:
         self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
         self.dict_annotations = {}
 
-        #try:
+        try:
 
-        self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-        self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-        self.config_file = r.json()["checkpoints"]["config_file"]
-        self.setup_dirs()
-        self.model_selected = self.dl_checkpoints()
-        print("You already have some checkpoints on your machine, we'll start training from there.")
-        return self.model_selected
+            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+            self.config_file = r.json()["checkpoints"]["config_file"]
+            self.setup_dirs()
+            self.model_selected = self.dl_checkpoints()
+            print("You already have some checkpoints on your machine, we'll start training from there.")
+            return self.model_selected
 
-        # except:
-        #     self.setup_dirs()
-        #     self.model_selected = None
-        #     print("You are working with an attached network, but no training checkpoint were found")
-        #     return self.model_selected
+        except:
+            self.setup_dirs()
+            self.model_selected = None
+            print("You are working with an attached network, but no training checkpoint were found")
+            return self.model_selected
 
     def setup_dirs(self):
 
@@ -278,7 +278,6 @@ class Client:
         config_path = ""
         for id in training_ids:
             path = os.path.join(self.project_id, self.network_id, str(id), "checkpoint")
-            utils.is_checkpoint(path, self.project_type)
             if not utils.is_checkpoint(path, self.project_type):
                 path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
                 if not utils.is_checkpoint(path_deep, self.project_type):

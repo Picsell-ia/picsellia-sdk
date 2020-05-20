@@ -179,9 +179,15 @@ def is_checkpoint(path, project_type):
     index_path = ""
     data_path = ""
     config_path = ""
-    if not os.path.isdir(path):
+
+    try:
+        if not os.path.isdir(path):
+            return False
+    except:
         return False
+
     for f in os.listdir(path):
+        print(f)
         if ".index" in f:
             index_path = f
         if ".data" in f:
