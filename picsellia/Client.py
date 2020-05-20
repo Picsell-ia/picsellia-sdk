@@ -278,9 +278,21 @@ class Client:
         config_path = ""
         for id in training_ids:
             path = os.path.join(self.project_id, self.network_id, str(id), "checkpoint")
-            if not utils.is_checkpoint(path, self.project_type):
+            if utils.is_checkpoint(path, self.project_type):
+                a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+                if a.lower() == 'y':
+                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                               self.network_id,
+                                                                                               str(self.training_id),
+                                                                                           "checkpoint"))
+                    return path
+                else:
+                    continue
+
+            else:
                 path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
-                if not utils.is_checkpoint(path_deep, self.project_type):
+
+                if utils.is_checkpoint(path_deep, self.project_type):
                     a = input("Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (str(id)))
                     if a.lower() == 'y':
                         print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
@@ -290,28 +302,6 @@ class Client:
                     else:
                         continue
 
-                else:
-                    a = input(
-                        "Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (
-                        str(id)))
-                    if a.lower() == 'y':
-                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                   self.network_id,
-                                                                                                   str(
-                                                                                                       self.training_id),
-                                                                                                   "checkpoint"))
-                        return path
-                    else:
-                        continue
-
-            else:
-                a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
-                if a.lower() == 'y':
-                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                               self.network_id,
-                                                                                               str(self.training_id),
-                                                                                           "checkpoint"))
-                    return path
                 else:
                     continue
 
