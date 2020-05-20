@@ -219,7 +219,7 @@ class Client:
         self.record_dir = os.path.join(self.base_dir, 'records')
         self.config_dir = os.path.join(self.base_dir, 'config')
         self.results_dir = os.path.join(self.base_dir, 'results')
-        self.exported_model = os.path.join(self.base_dir + 'exported_model')
+        self.exported_model_dir = os.path.join(self.base_dir, 'exported_model')
 
         if not os.path.isdir(self.project_id):
             print("First time using Picsell.ia on this project, initializing directories ...")
@@ -702,7 +702,7 @@ class Client:
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
         else:
-            file_path = '{}/{}/saved_model.pb'.format(self.exported_model)
+            file_path = '{}/{}/saved_model.pb'.format(self.exported_model_dir)
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
