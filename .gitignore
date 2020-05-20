@@ -2,3 +2,4 @@
 *.rst
 docs/
 dist/
+picsellia/main.py
