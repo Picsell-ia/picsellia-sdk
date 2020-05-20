@@ -478,10 +478,6 @@ class Client:
         if not "images" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
 
-        self.train_list = []
-        self.eval_list = []
-        self.train_list_id = []
-        self.eval_list_id = []
         cnt = 0
 
         print("Downloading PNG images to your machine ...")
@@ -496,13 +492,6 @@ class Client:
         for info, idx in zip(self.dict_annotations["images"], self.index_url):
 
             pic_name = os.path.join(self.png_dir, info['external_picture_url'])
-            if idx == 1:
-                self.train_list.append(pic_name)
-                self.train_list_id.append(info["internal_picture_id"])
-            else:
-                self.eval_list.append(pic_name)
-                self.eval_list_id.append(info["internal_picture_id"])
-
             if not os.path.isfile(pic_name):
                 try:
                     response = requests.get(info["signed_url"], stream=True)
@@ -519,28 +508,14 @@ class Client:
             sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
             sys.stdout.flush()
 
-        print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
-                                                                                  len(self.eval_list_id)))
+
         print("{} files were already on your machine".format(total_length - cnt))
         print(" {} PNG images have been downloaded to your machine".format(cnt))
 
-        print("Sending repartition to Picsell.ia backend")
 
-        label_train, label_test, cate = utils.get_labels_repartition_obj_detection(self.dict_annotations, self.index_url)
 
-        to_send = {"project_token": self.project_token,
-                   "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
-                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
-                   "network_id": self.network_id, "training_id": self.training_id}
 
-        try:
-            r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 201:
-                raise NetworkError('Can not send repartition to Picsell.ia Backend')
-            print("Repartition send ..")
 
-        except:
-            raise NetworkError('Can not send repartition to Picsell.ia Backend')
 
     def train_test_split(self, prop=0.8):
 
@@ -568,6 +543,23 @@ class Client:
 
         print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
                                                                                   len(self.eval_list_id)))
+
+        label_train, label_test, cate = utils.get_labels_repartition_obj_detection(self.dict_annotations, self.index_url)
+        
+        to_send = {"project_token": self.project_token,
+                   "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
+                   "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
+                   "network_id": self.network_id, "training_id": self.training_id}
+
+        try:
+            r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 201:
+                raise NetworkError('Can not send repartition to Picsell.ia Backend')
+            print("Repartition send ..")
+
+        except:
+            raise NetworkError('Can not send repartition to Picsell.ia Backend')
+
 
     def send_logs(self, logs=None, logs_path=None):
         """Send training logs to Picsell.ia Platform
