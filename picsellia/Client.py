@@ -91,7 +91,7 @@ class Client:
                     raise ResourceNotFoundError(
                         "Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
-    def create_network(self, network_name):
+    def create_network(self, network_name, orphan= None):
         """ Initialise the NeuralNet instance on Picsell.ia server.
             If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -142,7 +142,18 @@ class Client:
         self.training_id = r.json()["training_id"]
         self.network_name = network_name
         self.dict_annotations = {}
-        self.setup_dirs()
+
+        if orphan is not True:
+            self.setup_dirs()
+        else:
+            self.base_dir = os.path.join(self.project_name, self.network_name, str(self.training_id))
+            self.metrics_dir = os.path.join(self.base_dir, 'metrics')
+            self.checkpoint_dir = os.path.join(self.base_dir, 'checkpoint')
+            self.record_dir = os.path.join(self.base_dir, 'records')
+            self.config_dir = os.path.join(self.base_dir, 'config')
+            self.results_dir = os.path.join(self.base_dir, 'results')
+            self.exported_model_dir = os.path.join(self.base_dir, 'exported_model')
+
 
         print("New Network have been created")
         return None
@@ -738,10 +749,10 @@ class Client:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("File not found")
             file_name = file_path.split('/')[-1]
-            self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
+            self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id), file_name)
         else:
             file_path = os.path.join(self.exported_model_dir, 'saved_model/saved_model.pb')
-            self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
+            self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
 
@@ -1070,7 +1081,7 @@ class Client:
         print(
             "Welcome to the Complete experiment uploader of Picsell.ia\nSimple GUI to push a model to the community\n")
         model_name = input("1) Select a the desired name of the model you're about to upload\n")
-        self.create_network(model_name)
+        self.create_network(model_name, orphan=True)
 
         if self.project_type != "classification":
             print(
@@ -1123,22 +1134,36 @@ class Client:
 
         a = input("Do you have some training logs in json format to send ?(Y/N) ")
         if a.lower() == "y":
-            json_path = easygui.fileopenbox(filetypes="*.json")
+            try:
+                json_path = easygui.fileopenbox(filetypes="*.json")
+            except:
+                json_path = input("GUI not supported please enter your path : ")
             self.send_logs(logs_path=json_path)
 
         a = input("Do you have some visual examples to send ?(Y/N) ")
         if a.lower() == 'y':
-            list_files = easygui.fileopenbox(filetypes=["*.png", "*.jpg", "*.jpeg"], multiple=True)
+            try:
+                list_files = easygui.fileopenbox(filetypes=["*.png", "*.jpg", "*.jpeg"], multiple=True)
+            except:
+                list_files = input("GUI not supported please enter the path of one image : ")
             if not len(list_files) == 0:
                 self.send_examples(example_path_list=list_files)
 
         a = input("Do you have a json maping your label with your class ?(y/n) ")
         if a.lower() == 'y':
             print("Please choose your json file")
-            json_path = easygui.fileopenbox(filetypes="*.json")
-            FileProcessor(self).send_labelmap(label_path=json_path)
+            try:
+                json_path = easygui.fileopenbox(filetypes="*.json")
+            except:
+                json_path = input("GUI not supported please enter your path : ")
+            self.send_labelmap(label_path=json_path)
+
         print("Ok now, let's send your frozen graph to wrap it up")
-        model_path = easygui.fileopenbox(filetypes="*.pb")
+        try:
+            model_path = easygui.fileopenbox(filetypes="*.pb")
+        except:
+            model_path = input("GUI not supported please enter your path : ")
+
         if not model_path == "":
             self.send_model(model_path)
 
@@ -1459,8 +1484,9 @@ class Client:
 
 if __name__ == '__main__':
     print("Trying to create a new model ")
-    client = Client(api_token="bdcfce35e0ff716d76a1bd549cc0804c19cb0f23", host="http://localhost:8000/sdk/")
-    client.checkout_project(project_token="bf6e4395-01ba-40a3-81a6-3e5666490128")
-    client.checkout_network('test_up')
-    client.dl_annotations()
-    client.dl_pictures(prop=0.5)
+    client = Client(api_token="03a0df321ccf19fad8eff1439e2bd996c6363d47", host="https://backstage.picsellia.com/sdk/")
+    client.checkout_project(project_token="808a7f70-8eaa-45ee-b788-158a23581965")
+    client.upload_and_create()
+    #client.checkout_network('test_up')
+    #client.dl_annotations()
+    #client.dl_pictures(prop=0.5)
