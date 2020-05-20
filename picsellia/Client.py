@@ -79,7 +79,7 @@ class Client:
         self.network_names = r.json()["network_names"]
 
         if png_dir is None:
-            self.png_dir = os.path.join(self.project_id, 'images')
+            self.png_dir = os.path.join(self.project_name, 'images')
         else:
             self.png_dir = png_dir
             print("Looking for images @ %s ..." % self.png_dir)
