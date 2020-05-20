@@ -140,8 +140,7 @@ class Client:
 
         self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
-        self.network_name = model_name
-        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        self.network_name = network_name
         self.dict_annotations = {}
         self.setup_dirs()
 
@@ -195,7 +194,7 @@ class Client:
         response = r.json()
         self.network_id = response["network_id"]
         self.training_id = response["training_id"]
-        self.base_dir = os.path.join(self.project_name, self.network_name, str(self.training_id))
+        self.network_name = network_name
         self.dict_annotations = {}
         self.setup_dirs()
         self.model_selected = self.dl_checkpoints(response)
