@@ -739,11 +739,7 @@ class Client:
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
         else:
-<<<<<<< HEAD
-            file_path = '{}/{}/saved_model.pb'.format(self.exported_model_dir)
-=======
-            file_path = os.path.join(self.exported_model, 'saved_model.pb')
->>>>>>> 64fa38f54466f0620c5475779b65ecff5421cb27
+            file_path = os.path.join(self.exported_model, 'saved_model/saved_model.pb')
             self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
