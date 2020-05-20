@@ -303,14 +303,21 @@ class Client:
                 path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
 
                 if utils.is_checkpoint(path_deep, self.project_type):
-                    a = input("Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (str(id)))
-                    if a.lower() == 'y':
+                    if a.lower() == 'y' or a.lower()=='yes':
                         print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
-                                                                                                   self.network_id,str(self.training_id),
-                                                                                                   "checkpoint"))
+                                                                                                   self.network_id,
+                                                                                                   str(self.training_id),
+                                                                                               "checkpoint"))
                         return path_deep
-                    else:
-                        continue
+                        
+                    elif a.lower() not in ["y", "yes", "n", "no"]:
+                        a = input("Please type y or n [y/n]" % (str(id)))
+                        if a.lower() == 'y' or a.lower()=='yes':
+                            print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                                       self.network_id,
+                                                                                                       str(self.training_id),
+                                                                                                   "checkpoint"))
+                            return path_deep
 
                 else:
                     continue
