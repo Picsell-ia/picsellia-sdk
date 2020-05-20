@@ -275,7 +275,7 @@ class Client:
 
 
         if (self.checkpoint_index is None) or (self.checkpoint_data is None):
-            print("You are working with a Custom model")
+            print("You are working with a Custom model, you should start from a pre-trained network.")
             return None
 
 
