@@ -1,16 +1,15 @@
-import cv2
-import cvxpy
-import io
 import json
-import numpy as np
 import os
-import requests
-import time
-from PIL import Image, ImageDraw
-from picsellia.exceptions import *
 import sys
+
+import Utils as utils
 import easygui
-import random
+import requests
+from PIL import Image
+from FileProcessor import FileProcessor
+from picsellia.exceptions import *
+
+
 class Client:
     """
     The Picsell.ia Client contains info necessary for connecting to the Picsell.ia Platform.
@@ -22,52 +21,56 @@ class Client:
                                         - save weights and SavedModel to Picsell.ia server.
 
     """
-    def __init__(self, api_token =None, host="https://backstage.picsellia.com/sdk/"):
+
+    def __init__(self, api_token=None, host="https://backstage.picsellia.com/sdk/"):
         """ Creates and initializes a Picsell.ia Client.
         Args:
             project_token (str): project_token key, given on the platform.
             host (str): URL of the Picsell.ia server to connect to.
-            png_dir (str): path/to/your/images If you are working locally and don't want to dl images from our server
         Raises:
             InvalidQueryError: If no 'project_token' provided as an argument.
-            AuthenticationError: If `project_token` does not match the provided project_token on the platform.
             NetworkError: If Picsell.ia server not responding or host is incorrect.
-            ResourceNotFoundError: If the png_dir provided doesn't point to images
         """
 
         if api_token is None:
             raise InvalidQueryError("api_token argument not provided")
 
-        self.auth = { "Authorization" : "Bearer " + api_token}
+        self.auth = {"Authorization": "Bearer " + api_token}
         self.host = host
         try:
             r = requests.get(self.host + 'ping', headers=self.auth)
         except:
-           raise NetworkError(
-               "Server is not responding, please check your host or Picsell.ia server status on twitter")
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
+        self.supported_img_types = [".png", ".jpg", ".jpeg"]
+        print(
+            "Welcome {}, Glad to have you back".format(
+                self.username))
 
-        print("Welcome {}, Please initialize your project with init_project() and the project token provided on the platform".format(self.username))
-        print("Available project : \n")
-        for e in self.project_name_list:
-            print("\t",e)
-
-
-    def init_project(self, project_token=None, png_dir=None):
-
+    def checkout_project(self, project_token=None, png_dir=None):
+        """ Attach the Picsell.ia Client to the desired project.
+                Args:
+                    project_token (str): project_token key, given on the platform.
+                    png_dir (str): path to your images, if None you can dl pic
+                Raises:
+                    InvalidQueryError: If no 'project_token' provided as an argument.
+                    NetworkError: If Picsell.ia server not responding or host is incorrect.
+                """
         if project_token is None:
             raise InvalidQueryError("project_token argument not provided")
 
         to_send = {"project_token": project_token}
-        print(to_send)
         try:
             r = requests.get(self.host + 'init_project', data=json.dumps(to_send), headers=self.auth)
         except:
             raise NetworkError(
                 "Server is not responding, please check your host or Picsell.ia server status on twitter")
         if r.status_code == 400:
-            raise AuthenticationError('The project_token provided does not match any of the known project_token for profile.')
+            raise AuthenticationError(
+                'The project_token provided does not match any of the known project_token for profile.')
+
         self.project_token = project_token
         self.project_id = r.json()["project_id"]
         self.project_infos = r.json()["infos"]
@@ -76,7 +79,7 @@ class Client:
         self.network_names = r.json()["network_names"]
 
         if png_dir is None:
-            self.png_dir = self.project_id + '/images/'
+            self.png_dir = os.path.join(self.project_id, 'images')
         else:
             self.png_dir = png_dir
             print("Looking for images @ %s ..." % self.png_dir)
@@ -84,55 +87,11 @@ class Client:
                 raise ResourceNotFoundError("Can't find images at %s" % (self.png_dir))
 
             for filename in os.listdir(self.png_dir):
-                if filename.split('.')[-1] not in ["png", "jpg", "jpeg"]:
-                    raise ResourceNotFoundError("Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
+                if not filename.endswith(self.supported_img_types):
+                    raise ResourceNotFoundError(
+                        "Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
-        if self.project_infos is not None and self.network_names is not None:
-            print("Welcome to Picsell.ia Client, this project_token is linked to your project : {}\nThis is a {} project".format(self.project_name, self.project_type))
-            print("Here is the current state of your project:\n")
-            for i,col in enumerate(self.project_infos):
-
-                print("-"*15)
-                print("{} training version(s) for Network named : {}".format(len(col), self.network_names[i]))
-                print("-"*15)
-                for training in col:
-                    print("\t For training id {}:\n".format(training["training_id"]))
-                    if training["is_datasplit"]:
-                        print("\t\t Train Test Set repartition : DONE")
-                    else:
-                        print("\t\t Train Test Set repartition : NOT DONE")
-
-                    if training["is_examples"]:
-                        print("\t\t Visual results uploaded to Picsell.ia : DONE")
-                    else:
-                        print("\t\t Visual results uploaded to Picsell.ia : NOT DONE")
-
-                    if training["is_metrics"]:
-                        print("\t\t Training logs uploaded to Picsell.ia : DONE")
-                    else:
-                        print("\t\t Training logs uploaded to Picsell.ia : NOT DONE")
-
-                    print("\t\t Model usable from Picsell.ia : DONE")
-
-        elif self.project_infos is None and self.network_names is not None:
-            print("-"*80)
-            print("Welcome to Picsell.ia Client, this project_token is linked to your project : {}".format(self.project_name))
-            print("-"*80)
-            print("You don't have any Network trained for this project yet.\n")
-            print("{} Network(s) attached to your project:".format(len(self.network_names)))
-            for e in self.network_names:
-                print("\t - {}".format(e))
-            print("\nTo initialise a training session, please run init_model(MODEL_NAME)\n")
-
-        elif self.project_infos is None and self.network_names is None:
-            print("Welcome to Picsell.ia Client, this project_token is linked to your project : {}\n".format(self.project_name))
-            print("You don't have any Network attache to this project yet.\nIf you want to continue without an attached model, please initialise it with init_model(YOUR NAME)")
-
-
-
-
-
-    def init_model(self, model_name):
+    def create_network(self, network_name):
         """ Initialise the NeuralNet instance on Picsell.ia server.
             If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -151,7 +110,7 @@ class Client:
                             - exported_model/
 
         Args:
-            model_name (str): It's simply the name you want to give to your NeuralNet
+            network_name (str): It's simply the name you want to give to your NeuralNet
                               For example, SSD_Picsellia
 
         Raises:
@@ -159,65 +118,109 @@ class Client:
             NetworkError: If Picsell.ia server not responding or host is incorrect.
         """
 
-        assert isinstance(model_name, str), "model name must be string, got %s" % type(model_name)
+        assert isinstance(network_name, str), "model name must be string, got %s" % type(network_name)
 
+        if self.network_names is None:
+            self.network_names = []
+        if network_name in self.network_names:
+            raise InvalidQueryError("The Network name you provided already exists for this project")
 
-        if self.network_names is None or model_name not in self.network_names:
-            a = input("The model name you provided is not linked to any existing model attached the project {}\nCurrent attached model: {}\nAre you sure you want to continue with this model name (Y/N)? ({})".format(self.project_name, self.network_names, model_name))
-            if a.lower() == 'y':
-                self.custom = True
-                pass
-            else:
-                model_name = input("Please type the new model name")
-                self.custom = False
-                self.init_model(model_name)
-
-
-        to_send = {"model_name": model_name, "project_token": self.project_token}
+        to_send = {"model_name": network_name, "project_token": self.project_token}
 
         try:
             r = requests.get(self.host + 'init_model', data=json.dumps(to_send), headers=self.auth)
             print(r.json())
         except:
-            raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
 
         if r.status_code == 400:
-            raise AuthenticationError('The project_token provided does not match any of the known project_token for profile.')
+            raise AuthenticationError(
+                'The project_token provided does not match any of the known project_token for profile.')
 
         self.network_id = r.json()["network_id"]
         self.training_id = r.json()["training_id"]
-        self.base_dir = os.path.join(self.project_id,self.network_id,str(self.training_id))
+        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        self.dict_annotations = {}
+        self.setup_dirs()
+
+        print("New Network have been created")
+        return None
+
+    def checkout_network(self, network_name):
+        """ Attach the Picsell.ia Client to the desired Network.
+            If the model name exists on the server for this project, you will create a new version of your training.
+
+            Create all the repositories for your training with this architecture :
+
+              your_code.py
+              - project_id
+                    - images/
+                    - network_id/
+                        - training_version/
+                            - logs/
+                            - checkpoints/
+                            - records/
+                            - config/
+                            - results/
+                            - exported_model/
+
+        Args:
+            network_name (str): It's simply the name you want to give to your NeuralNet
+                              For example, SSD_Picsellia
+
+        Raises:
+            AuthenticationError: If `project_token` does not match the provided project_token on the platform.
+            NetworkError: If Picsell.ia server not responding or host is incorrect.
+        """
+
+        assert isinstance(network_name, str), "model name must be string, got %s" % type(network_name)
+
+        if network_name not in self.network_names:
+            raise InvalidQueryError("The Network name you provided does not exists for this project")
+
+        to_send = {"model_name": network_name, "project_token": self.project_token}
 
         try:
-            self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
-            self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
-            self.config_file = r.json()["checkpoints"]["config_file"]
-            
-            self.model_selected = self.dl_checkpoints()
-            self.dict_annotations = {}
-            self.setup_dirs()
-            print("It's the training number {} for this project".format(self.training_id))
-            return self.model_selected
-
+            r = requests.get(self.host + 'init_model', data=json.dumps(to_send), headers=self.auth)
         except:
-            self.dict_annotations = {}
-            self.setup_dirs()
-            print("You are working with you own local model")
-            return None
-            # raise ResourceNotFoundError("No checkpoint present on our backend, you should restart clean by deleting your network on the platform")
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
 
+        if r.status_code == 400:
+            raise AuthenticationError(
+                'The project_token provided does not match any of the known project_token for profile.')
 
+        self.network_id = r.json()["network_id"]
+        self.training_id = r.json()["training_id"]
+        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        self.dict_annotations = {}
 
+        #try:
+
+        self.checkpoint_index = r.json()["checkpoints"]["index_object_name"]
+        self.checkpoint_data = r.json()["checkpoints"]["data_object_name"]
+        self.config_file = r.json()["checkpoints"]["config_file"]
+        self.setup_dirs()
+        self.model_selected = self.dl_checkpoints()
+        print("You already have some checkpoints on your machine, we'll start training from there.")
+        return self.model_selected
+
+        # except:
+        #     self.setup_dirs()
+        #     self.model_selected = None
+        #     print("You are working with an attached network, but no training checkpoint were found")
+        #     return self.model_selected
 
     def setup_dirs(self):
-        self.base_dir = "{}/{}/{}/".format(self.project_id, self.network_id, self.training_id)
-        self.log_dir = self.base_dir + "logs/"
-        self.checkpoint_dir = self.base_dir + 'checkpoint/'
-        self.record_dir = self.base_dir + 'records/'
-        self.config_dir = self.base_dir + 'config/'
-        self.results_dir = self.base_dir + 'results/'
-        self.exported_model = self.base_dir + 'exported_model/'
 
+        self.base_dir = os.path.join(self.project_id, self.network_id, str(self.training_id))
+        self.metrics_dir = os.path.join(self.base_dir, 'metrics')
+        self.checkpoint_dir = os.path.join(self.base_dir, 'checkpoint')
+        self.record_dir = os.path.join(self.base_dir, 'records')
+        self.config_dir = os.path.join(self.base_dir, 'config')
+        self.results_dir = os.path.join(self.base_dir, 'results')
+        self.exported_model = os.path.join(self.base_dir + 'exported_model')
 
         if not os.path.isdir(self.project_id):
             print("First time using Picsell.ia on this project, initializing directories ...")
@@ -238,9 +241,9 @@ class Client:
             print("Creating directory for checkpoints project {}".format(self.base_dir))
             os.mkdir(self.checkpoint_dir)
 
-        if not os.path.isdir(self.log_dir):
-            print("Creating directory for logs of project {}".format(self.log_dir))
-            os.mkdir(self.log_dir)
+        if not os.path.isdir(self.metrics_dir):
+            print("Creating directory for logs of project {}".format(self.metrics_dir))
+            os.mkdir(self.metrics_dir)
 
         if not os.path.isdir(self.record_dir):
             print("Creating directory for records of project {}".format(self.base_dir))
@@ -257,133 +260,129 @@ class Client:
     def dl_checkpoints(self, checkpoint_path=None):
 
         if checkpoint_path is not None:
-            if not os.path.isdit(checkpoint_path):
+            if not os.path.isdir(checkpoint_path):
                 raise ResourceNotFoundError("No directory @ %s" % checkpoint_path)
-
             return checkpoint_path
-        if (self.checkpoint_index==None) or (self.checkpoint_data==None):
+
+        if (self.checkpoint_index is None) or (self.checkpoint_data is None):
             raise ResourceNotFoundError("There are no existing checkpoints for this model. \
             Upload checkpoints first")
-        # try:
-        if not self.training_id == 0:
-            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
-        else:
-            checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
 
-        if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
-            if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
-                os.makedirs(os.path.join(self.base_dir,'origin_checkpoints'))
-            print("iciiiiiii" ,self.checkpoint_index)
-            url = self._get_presigned_url('get', self.checkpoint_index, bucket_name="picsellia-private-model-storage")
+        # list all existing training id
 
-            origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-            checkpoint_file = os.path.join(origin_checkpoint_path, self.checkpoint_index.split('/')[-1])
-            with open(checkpoint_file, 'wb') as handler:
-                print ("Downloading %s" % self.checkpoint_index)
-                response = requests.get(url, stream=True)
-                total_length = response.headers.get('content-length')
-                # if total_length is None: # no content length header
-                #     print("couldn't download checkpoint index file")
-                #     self.checkpoint_index = None
-                # else:
+        list_training = os.listdir(os.path.join(self.project_id, self.network_id))
+        training_ids = sorted([int(e) for e in list_training], reverse=True)
+        print("available training id , ", training_ids)
+
+        index_path = ""
+        data_path = ""
+        config_path = ""
+        for id in training_ids:
+            path = os.path.join(self.project_id, self.network_id, str(id), "checkpoint")
+            utils.is_checkpoint(path, self.project_type)
+            if not utils.is_checkpoint(path, self.project_type):
+                path_deep = os.path.join(self.project_id, self.network_id, str(id), "checkpoint", "origin")
+                if not utils.is_checkpoint(path_deep, self.project_type):
+                    a = input("Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (str(id)))
+                    if a.lower() == 'y':
+                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                                   self.network_id,str(self.training_id),
+                                                                                                   "checkpoint"))
+                        return path_deep
+                    else:
+                        continue
+
+                else:
+                    a = input(
+                        "Found checkpoints files for training %s , do you want to use this checkpoints ? [y/n]" % (
+                        str(id)))
+                    if a.lower() == 'y':
+                        print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                                   self.network_id,
+                                                                                                   str(
+                                                                                                       self.training_id),
+                                                                                                   "checkpoint"))
+                        return path
+                    else:
+                        continue
+
+            else:
+                a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+                if a.lower() == 'y':
+                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_id,
+                                                                                               self.network_id,
+                                                                                               str(self.training_id),
+                                                                                           "checkpoint"))
+                    return path
+                else:
+                    continue
+
+
+        path_to_origin = os.path.join(self.checkpoint_dir, "origin")
+        if not os.path.isdir(path_to_origin):
+            os.makedirs(path_to_origin)
+
+        url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_name='picsellia-private-model-storage')
+        checkpoint_file = os.path.join(path_to_origin, self.checkpoint_index.split('/')[-1])
+        with open(checkpoint_file, 'wb') as handler:
+            response = requests.get(url_index, stream=True)
+            total_length = response.headers.get('content-length')
+            if total_length is None:  # no content length header
+                print("couldn't download checkpoint index file")
+                self.checkpoint_index = None
+            else:
+                print("Downloading %s" % self.checkpoint_index)
                 dl = 0
                 total_length = len(response.content)
                 for data in response.iter_content(chunk_size=1024):
                     dl += len(data)
                     handler.write(data)
                     done = int(50 * dl / total_length)
-                    sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
+                    sys.stdout.write("\r[%s%s]" % ('=' * (done - 1) + '>', ' ' * (50 - done)))
                     sys.stdout.flush()
                 print('Checkpoint Index downloaded')
-        else:
-            origin_checkpoint_path = checkpoint_dir_old
-            if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])):
-                raise FileNotFoundError(".index file does not exists")
-            print("Last checkpoint data are on your filesystem, we'll use it..")
 
-        # except:
-        #     raise FileNotFoundError("no ckpt.index file found")
-        #     self.checkpoint_index = None
-
-        try:
-            # url = self._get_presigned_url('get',self.checkpoint_data)
-            if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
+        url_config = self._get_presigned_url('get', self.config_file, bucket_name="picsellia-private-model-storage")
+        config_file = os.path.join(path_to_origin, self.config_file.split('/')[-1])
+        with open(config_file, 'wb') as handler:
+            print("Downloading %s" % self.config_file)
+            response = requests.get(url_config, stream=True)
+            total_length = response.headers.get('content-length')
+            if total_length is None:
+                dl = 0
+                total_length = int(total_length)
+                print("couldn't download config file")
             else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
+                print("Downloading %s" % self.checkpoint_index)
+                dl = 0
+                total_length = len(response.content)
+                for data in response.iter_content(chunk_size=1024):
+                    dl += len(data)
+                    handler.write(data)
+                    done = int(50 * dl / total_length)
+                    print('Config downloaded')
 
-            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
-                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
-                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get',self.checkpoint_data, bucket_name="picsellia-private-model-storage")
-
-                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-                checkpoint_file = os.path.join(origin_checkpoint_path,self.checkpoint_data.split('/')[-1])
-                with open(checkpoint_file, 'wb') as handler:
-                    print ("Downloading %s" % self.checkpoint_data)
-                    response = requests.get(url, stream=True)
-                    total_length = response.headers.get('content-length')
-                    if total_length is None: # no content length header
-                        print("couldn't download checkpoint data file")
-                        self.checkpoint_data = None
-                    else:
-                        dl = 0
-                        total_length = int(total_length)
-                        for data in response.iter_content(chunk_size=4096):
-                            dl += len(data)
-                            handler.write(data)
-                            done = int(50 * dl / total_length)
-                            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
-                            sys.stdout.flush()
-                        print('Checkpoint Data downloaded')
+        url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_name="picsellia-private-model-storage")
+        checkpoint_file = os.path.join(path_to_origin, self.checkpoint_data.split('/')[-1])
+        with open(checkpoint_file, 'wb') as handler:
+            print("Downloading %s" % self.checkpoint_data)
+            response = requests.get(url_data, stream=True)
+            total_length = response.headers.get('content-length')
+            if total_length is None:  # no content length header
+                print("couldn't download checkpoint data file")
+                self.checkpoint_data = None
             else:
-                origin_checkpoint_path = checkpoint_dir_old
-                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.checkpoint_index.split('/')[-1])):
-                    raise FileNotFoundError(".index file does not exists")
-                print("Last checkpoint index are on your filesystem, we'll use it..")
+                dl = 0
+                total_length = int(total_length)
+                for data in response.iter_content(chunk_size=4096):
+                    dl += len(data)
+                    handler.write(data)
+                    done = int(50 * dl / total_length)
+                    sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
+                    sys.stdout.flush()
+                print('Checkpoint Data downloaded')
 
-        except:
-            print("no ckpt.data file found")
-            self.checkpoint_data = None
-
-        try:
-            # url = self._get_presigned_url('get',self.checkpoint_data)
-            if not self.training_id == 0:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id-1), "checkpoint")
-            else:
-                checkpoint_dir_old = os.path.join(self.project_id, self.network_id, str(self.training_id),"origin_checkpoints")
-
-            if not os.path.isdir(checkpoint_dir_old) or len(os.listdir(checkpoint_dir_old)) < 3:
-                if not os.path.isdir(os.path.join(self.base_dir,'origin_checkpoints')):
-                    os.mkdir(os.path.join(self.base_dir,'origin_checkpoints'))
-                url = self._get_presigned_url('get', self.config_file, bucket_name="picsellia-private-model-storage")
-
-                origin_checkpoint_path = os.path.join(self.base_dir,'origin_checkpoints')
-                config_file = os.path.join(origin_checkpoint_path,self.config_file.split('/')[-1])
-                with open(config_file, 'wb') as handler:
-                    print ("Downloading %s" % self.config_file)
-                    response = requests.get(url, stream=True)
-                    total_length = response.headers.get('content-length')
-                    dl = 0
-                    total_length = int(total_length)
-                    for data in response.iter_content(chunk_size=4096):
-                        dl += len(data)
-                        handler.write(data)
-                        done = int(50 * dl / total_length)
-                        sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
-                        sys.stdout.flush()
-                        print('Config downloaded')
-            else:
-                origin_checkpoint_path = checkpoint_dir_old
-                if not os.path.isfile(os.path.join(origin_checkpoint_path,self.config_file.split('/')[-1])):
-                    raise FileNotFoundError(".config file does not exists")
-                print("Last checkpoint index are on your filesystem, we'll use it..")
-
-        except:
-            print("no ckpt.data file found")
-            self.checkpoint_data = None
-
-        return origin_checkpoint_path
+        return path_to_origin
 
     def dl_annotations(self, option="train"):
         """ Pull all the annotations made on Picsell.ia Platform for your project.
@@ -410,18 +409,28 @@ class Client:
             self.dict_annotations = r.json()
 
         except:
-            raise NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
 
     def dl_latest_saved_model(self, path_to_save=None):
+        """ Pull the latest  Picsell.ia Platform for your project.
 
+                    Args:
+                        option (str): Define what time of annotation to export (accepted or all)
+
+                    Raises:
+                        AuthenticationError: If `project_token` does not match the provided project_token on the platform.
+                        NetworkError: If Picsell.ia server not responding or host is incorrect.
+                        ResourceNotFoundError: If we can't find any annotations for that project.
+                    """
         if path_to_save is None:
             raise InvalidQueryError("Please precise where you want to save .pb file.")
         if not os.path.isdir(path_to_save):
             os.makedirs(path_to_save)
-        if not hasattr(self, "training_id") :
+        if not hasattr(self, "training_id"):
             raise ResourceNotFoundError("Please init model first")
 
-        if not hasattr(self, "auth") :
+        if not hasattr(self, "auth"):
             raise ResourceNotFoundError("Please init client first")
 
         to_send = {"project_token": self.project_token, "network_id": self.training_id}
@@ -437,7 +446,7 @@ class Client:
 
         url = self._get_presigned_url("get", object_name, bucket_name="picsellia-private-model-storage")
 
-        with open(os.path.join(path_to_save,'saved_model.pb'), 'wb') as handler:
+        with open(os.path.join(path_to_save, 'saved_model.pb'), 'wb') as handler:
             print("Downloading exported model..")
             response = requests.get(url, stream=True)
             total_length = response.headers.get('content-length')
@@ -451,146 +460,10 @@ class Client:
                 sys.stdout.flush()
                 print('Exported model downloaded @ %s' % path_to_save)
 
-    def _train_valid_split_obj_detection(self, prop=0.8):
-        """Perform Optimized train test split for Object Detection.
-           Uses optimization to find the optimal split to have the desired repartition of instances by set.
-
-        Args:
-            prop (float) : Percentage of Instances used for training.
-
-        Raises:
-            ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
-        """
-        if not hasattr(self, "dict_annotations") :
-            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
-
-        if not "categories" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-        if not "images" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-
-        final_mat = []
-        cate = [v["name"] for v in self.dict_annotations["categories"]]
-        print(cate)
-        for img in self.dict_annotations['images']:
-            cnt = [0] * len(cate)
-            internal_picture_id = img["internal_picture_id"]
-            for ann in self.dict_annotations["annotations"]:
-                if internal_picture_id == ann["internal_picture_id"]:
-                    for an in ann['annotations']:
-                        idx = cate.index(an['label'])
-                        cnt[int(idx)] += 1
-            final_mat.append(cnt)
-
-        L = np.array(final_mat).T
-        train_total = np.array([sum(e) for e in L])
-        nc, n = L.shape
-        train_mins = prop * train_total
-        train_mins = train_mins.astype('int')
-
-        valid_mins = (1 - prop) * train_total
-        valid_mins = valid_mins.astype('int')
-
-        x = cvxpy.Variable(n, boolean=True)
-        lr = cvxpy.Variable(nc, nonneg=True)
-        ur = cvxpy.Variable(nc, nonneg=True)
-
-        lb = (L @ x >= train_mins.T - lr)
-        ub = (L @ x <= (sum(L.T) - valid_mins).T + ur)
-        constraints = [lb, ub]
-
-        objective = (sum(lr) + sum(ur)) ** 2
-        problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
-        problem.solve()
-        result = x.value
-        self.index_url = [int(round(i)) for i in result]
-
-    def _train_valid_split_obj_simple(self, prop=0.8):
-        """Perform Optimized train test split for Object Detection.
-           Uses optimization to find the optimal split to have the desired repartition of instances by set.
-
-        Args:
-            prop (float) : Percentage of Instances used for training.
-
-        Raises:
-            ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
-        """
-        if not hasattr(self, "dict_annotations") :
-            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
-
-        if not "categories" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-        if not "images" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-
-
-        list_im = np.linspace(0,len(self.dict_annotations['images'])-1,len(self.dict_annotations['images'])).astype('int')
-        random.shuffle(list_im)
-        nb_im = int(prop*len(self.dict_annotations['images']))
-        train_list = list_im[:nb_im]
-        test_list = list_im[nb_im:]
-
-        index_url = []
-        for e in range(len(list_im)):
-            if e in train_list:
-                index_url.append(1)
-            elif e in test_list:
-                index_url.append(0)
-
-        self.index_url = index_url
-
-    def _get_and_send_labels_repartition_obj_detection(self):
-        """Perform train test split scanning for Object Detection.
-           Uses optimization to find the optimal split to have the desired repartition of instances by set.
-
-        Returns:
-            cate (array[str]) : Array of the classes names
-            cnt_train (array[int]) : Array of the number of object per class for the training set.
-            cnt_eval (array[int]) : Array of the number of object per class for the evaluation set.
-
-        Raises:
-            ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
-        """
-
-        if not hasattr(self, "dict_annotations") :
-            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
-
-        if not "categories" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-        if not "images" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
-
-
-        cate = [v["name"] for v in self.dict_annotations["categories"]]
-        cnt_train = [0] * len(cate)
-        cnt_eval = [0] * len(cate)
-
-        for img, index in zip(self.dict_annotations['images'], self.index_url):
-
-            internal_picture_id = img["internal_picture_id"]
-            for ann in self.dict_annotations["annotations"]:
-                if internal_picture_id == ann["internal_picture_id"]:
-                    for an in ann['annotations']:
-                        idx = cate.index(an['label'])
-                        if index == 1:
-                            cnt_train[int(idx)] += 1
-                        else:
-                            cnt_eval[int(idx)] += 1
-
-        return cnt_train, cnt_eval, cate
-
-
-
-    def local_pic_save(self, prop=0.8):
+    def dl_pictures(self, prop=0.8):
         """Download your training set on the machine (Use it to dl images to Google Colab etc.)
            Save it to /project_id/images/*
-
-           Perform train_test_split_obj_detection & send the repartition to Picsell.ia Platform
+           Perform train_test_split & send the repartition to Picsell.ia Platform
 
         Args :
             prop (float) Percentage of Instances used for training.
@@ -601,13 +474,12 @@ class Client:
 
         """
 
-        if not hasattr(self, "dict_annotations") :
+        if not hasattr(self, "dict_annotations"):
             raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
 
         if not "images" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotation function first")
 
-        images_infos = self.dict_annotations["images"]
         self.train_list = []
         self.eval_list = []
         self.train_list_id = []
@@ -617,13 +489,15 @@ class Client:
         print("Downloading PNG images to your machine ...")
 
         try:
-            self._train_valid_split_obj_simple(prop)
+            self.index_url = utils.train_valid_split_obj_simple(self.dict_annotations,prop)
         except:
             raise ProcessingError("Error during Train Test Split optimization, do you have classes with 0 instances ?")
 
+        dl = 0
+        total_length = len(self.dict_annotations["images"])
+        for info, idx in zip(self.dict_annotations["images"], self.index_url):
 
-        for info, idx in zip(images_infos, self.index_url):
-            pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('.')[0] + '.png')
+            pic_name = os.path.join(self.png_dir, info['external_picture_url'])
             if idx == 1:
                 self.train_list.append(pic_name)
                 self.train_list_id.append(info["internal_picture_id"])
@@ -635,262 +509,39 @@ class Client:
                 try:
                     response = requests.get(info["signed_url"], stream=True)
                     with open(pic_name, 'wb') as handler:
-                        for data in response.iter_content(chunk_size=4096):
+                        for data in response.iter_content(chunk_size=1024):
                             handler.write(data)
                     cnt += 1
                 except:
-                    raise ResourceNotFoundError("Image %s can't be downloaded" % (pic_name))
+                    print("Image %s can't be downloaded" % pic_name)
+                    pass
+            dl += 1
+            done = int(50 * dl / total_length)
+            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
+            sys.stdout.flush()
 
         print("{} Images used for training, {} Images used for validation".format(len(self.train_list_id),
                                                                                   len(self.eval_list_id)))
-        print("{} files were already on your machine".format(len(images_infos) - cnt))
+        print("{} files were already on your machine".format(total_length - cnt))
         print(" {} PNG images have been downloaded to your machine".format(cnt))
 
         print("Sending repartition to Picsell.ia backend")
 
-        label_train, label_test, cate = self._get_and_send_labels_repartition_obj_detection()
+        label_train, label_test, cate = utils.get_labels_repartition_obj_detection(self.dict_annotations, self.index_url)
 
-        to_send = {"project_token": self.project_token, "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
+        to_send = {"project_token": self.project_token,
+                   "train": {"train_list_id": self.train_list_id, "label_repartition": label_train, "labels": cate},
                    "eval": {"eval_list_id": self.eval_list_id, "label_repartition": label_test, "labels": cate},
-                   "network_id": self.network_id,"training_id": self.training_id}
-
+                   "network_id": self.network_id, "training_id": self.training_id}
 
         try:
             r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 201:
                 raise NetworkError('Can not send repartition to Picsell.ia Backend')
-
             print("Repartition send ..")
+
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
-
-    def generate_labelmap(self):
-        """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
-        ----------------------------------------------------------
-
-        Genrate the labelmap.pbtxt file needed for Tensorflow training at:
-
-            - project_id/
-                network_id/
-                    training_id/
-                        label_map.pbtxt
-
-
-
-        Raises:
-            ResourceNotFoundError : If no annotations in the Picsell.ia Client yet or images can't be downloaded
-                                    If no directories have been created first.
-
-        """
-        print("Generating labelmap ...")
-        if not hasattr(self, "dict_annotations") or not hasattr(self, "base_dir"):
-            raise ResourceNotFoundError("Please init model and dl_annotation()")
-
-        self.label_path = os.path.join(self.base_dir, "label_map.pbtxt")
-
-
-        if not "categories" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation() first")
-
-        categories = self.dict_annotations["categories"]
-        labels_Network = {}
-        try:
-            with open(self.label_path, "w+") as labelmap_file:
-                for k, category in enumerate(categories):
-                    name = category["name"]
-                    labelmap_file.write("item {\n\tname: \"" + name + "\"" + "\n\tid: " + str(k + 1) + "\n}\n")
-                    if self.project_type == 'classification':
-                        labels_Network[str(k)] = name
-                    else:
-                        labels_Network[str(k+1)] = name
-                labelmap_file.close()
-            print("Label_map.pbtxt crée @ {}".format(self.label_path))
-
-            self.label_map = labels_Network
-        except:
-            raise ResourceNotFoundError("No directory found, please call init_model() function first")
-
-
-    def send_labelmap(self, label_path=None):
-        """Attach to network, it allow nicer results visualisation on hub playground
-        """
-
-        if label_path is not None:
-            if not os.path.isfile(label_path):
-                raise FileNotFoundError("label map @ %s doesn't exists" % label_path)
-            with open(label_path, 'r') as f:
-                label_map = json.load(f)
-            label = {}
-            for k,v in label_map.items():
-                if len(k) < 3 and not all(map(str.isdigit, k)):
-                    label[v] = k
-
-        if not hasattr(self, "label_map") and label_path is None:
-            raise ValueError("Please Generate label map first")
-
-        if label_path is not None:
-            to_send = {"project_token": self.project_token, "labels": label, "network_id": self.network_id}
-        else:
-            to_send = {"project_token": self.project_token, "labels": self.label_map, "network_id": self.network_id}
-
-        try:
-            r = requests.get(self.host + 'attach_labels', data=json.dumps(to_send), headers=self.auth)
-        except:
-            raise NetworkError("Could not connect to picsellia backend")
-        if r.status_code != 201:
-            print(r.text)
-            raise ValueError("Could not upload label to server")
-
-    def _get_presigned_url(self,method,object_name, bucket_name=None):
-       # try:
-        print(method)
-        print(object_name)
-        if bucket_name is None:
-            to_send = {"object_name": object_name}
-            if method=='post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method=='get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
-        else:
-            to_send = {"object_name": object_name, "bucket_name": bucket_name}
-
-            if method=='post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method=='get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
-        #except:
-        #    raise NetworkError("Could not get an url to post annotations")
-
-
-    def _init_multipart(self):
-        """Initialize the upload to saved Checkpoints or SavedModel
-
-        Raises:
-            NetworkError: If it impossible to initialize upload
-            ResourceNotFoundError: If no saved_model saved
-
-        """
-
-        try:
-            to_send = {"object_name": self.OBJECT_NAME}
-            r = requests.get(self.host + 'init_upload', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                print(r.text)
-                return False
-            self.uploadId = r.json()["upload_id"]
-
-        except:
-            raise NetworkError('Impossible to initialize Upload')
-
-
-    def _get_url_for_part(self, no_part):
-        """Get a pre-signed url to upload a part of Checkpoints or SavedModel
-
-        Raises:
-            NetworkError: If it impossible to initialize upload
-
-        """
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME") or not hasattr(self, "uploadId"):
-            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
-        try:
-            to_send = {"project_token": self.project_token, "object_name": self.OBJECT_NAME,
-                       "upload_id": self.uploadId, "part_no": no_part}
-            r = requests.get(self.host + 'get_post_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise NetworkError("Impossible to get an url.. because :\n%s" % (r.text))
-            return r.json()["url"]
-        except:
-            raise NetworkError("Impossible to get an url..")
-
-    def _upload_part(self,file_path):
-        try:
-            max_size = 5 * 1024 * 1024
-            urls = []
-            file_size = os.path.getsize(file_path)
-            upload_by = int(file_size / max_size) + 1
-            with open(file_path, 'rb') as f:
-                for part in range(1, upload_by + 1):
-                    signed_url = self._get_url_for_part(part)
-                    urls.append(signed_url)
-                parts = []
-                for num, url in enumerate(urls):
-                    part = num + 1
-                    done = int(50 * num / len(urls))
-                    try:
-                        file_data = f.read(max_size)
-                        res = requests.put(url, data=file_data)
-                        if res.status_code != 200:
-                            raise NetworkError("Impossible to put part no {}\n because {}".format(num+1, res.text))
-                        etag = res.headers['ETag']
-                        parts.append({'ETag': etag, 'PartNumber': part})
-                        sys.stdout.write("\r[%s%s]" % ('=' * (done-1)+'>', ' ' * (50-done)) )
-                        sys.stdout.flush()
-                    except:
-                        raise NetworkError("Impossible to put part no {}".format(num+1))
-                return parts
-        except:
-            raise NetworkError("Impossible to upload frozen graph to Picsell.ia backend")
-
-
-    def _complete_part_upload(self, parts,object_name,file_type):
-
-        """Complete the upload a part of Checkpoints or SavedModel
-
-        Raises:
-            NetworkError: If it impossible to initialize upload
-
-        """
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME"):
-            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
-        try:
-            to_send = {"project_token": self.project_token, "object_name": object_name,"file_type":file_type,
-                       "upload_id": self.uploadId, "parts": parts, "network_id": self.network_id, "training_id": self.training_id}
-
-            r = requests.get(self.host + 'complete_upload', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 201:
-                NetworkError("Impossible to get an url.. because :\n%s" % (r.text))
-            return True
-        except:
-            raise NetworkError("Impossible to get an url..")
-
-
-    # def get_weights(self, version='latest'):
-    #
-    #     """
-    #     Method used to dl the wanted weights to start training
-    #     :arg version default = "latest"
-    #                         = str::version printed in list_weights method
-    #
-    #     """
-    #
-    #     print("Downloading weights ...")
-    #     to_send = {"project_token": self.project_token, "version": version}
-    #     r = requests.get(self.host + 'get_checkpoint', data=json.dumps(to_send))
-    #     date = time.strftime("%Y%m%d-%H%M%S")
-    #
-    #     if r.status_code != 200:
-    #         print(r.text)
-    #         return False
-    #
-    #     self.url_weights = r.json()["url"]
-    #     self.weight_path = self.checkpoint_dir + date + '.h5'
-    #     with requests.get(self.url_weights, stream=True) as r:
-    #         r.raise_for_status()
-    #         with open(self.weight_path, 'wb') as f:
-    #             for chunk in r.iter_content(chunk_size=8192):
-    #                 if chunk:  # filter out keep-alive new chunks
-    #                     f.write(chunk)
-    #                     # f.flush()
-    #
-    #     print("Weights pulled to your machine ...")
 
     def send_logs(self, logs=None, logs_path=None):
         """Send training logs to Picsell.ia Platform
@@ -903,7 +554,9 @@ class Client:
 
         """
 
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "project_token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
+                                                                                              "host") or not hasattr(
+                self, "project_token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
 
         if logs_path is not None:
@@ -916,10 +569,11 @@ class Client:
             raise ResourceNotFoundError("No log dict or path to logs .json given")
 
         try:
-            to_send = {"project_token": self.project_token, "training_id": self.training_id, "logs": logs,  "network_id": self.network_id}
+            to_send = {"project_token": self.project_token, "training_id": self.training_id, "logs": logs,
+                       "network_id": self.network_id}
             r = requests.post(self.host + 'post_logs', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 201:
-                raise NetworkError("The logs have not been sent because %s" %(r.text))
+                raise NetworkError("The logs have not been sent because %s" % (r.text))
 
             print(
                 "Training logs have been sent to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
@@ -937,7 +591,9 @@ class Client:
             ResourceNotFoundError: If no saved_model saved
 
         """
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "project_token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
+                                                                                              "host") or not hasattr(
+                self, "project_token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
 
         if metrics_path is not None:
@@ -950,10 +606,11 @@ class Client:
             raise ResourceNotFoundError("No metrics dict or path to metrics.json given")
 
         try:
-            to_send = {"project_token": self.project_token, "training_id": self.training_id, "metrics": metrics,  "network_id": self.network_id}
+            to_send = {"project_token": self.project_token, "training_id": self.training_id, "metrics": metrics,
+                       "network_id": self.network_id}
             r = requests.post(self.host + 'post_metrics', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 201:
-                raise NetworkError("The evaluation metrics have not been sent because %s" %(r.text))
+                raise NetworkError("The evaluation metrics have not been sent because %s" % (r.text))
 
             print(
                 "Evaluation metrics have been sent to Picsell.ia Platform...\nYou can now inspect and showcase results on the platform.")
@@ -961,7 +618,7 @@ class Client:
         except:
             raise NetworkError("Could not connect to Picsell.ia Server")
 
-    def send_examples(self,id=None, example_path_list=None):
+    def send_examples(self, id=None, example_path_list=None):
         """Send Visual results to Picsell.ia Platform
 
         Args:
@@ -981,14 +638,14 @@ class Client:
                 raise ResourceNotFoundError("You didn't init_model(), please call this before sending examples")
 
         elif id is not None and example_path_list is None:
-            base_dir = '{}/{}/'.format(self.project_id,self.network_id)
+            base_dir = '{}/{}/'.format(self.project_id, self.network_id)
             if str(id) in os.listdir(base_dir):
-                results_dir = os.path.join(base_dir,str(id)+'/results')
+                results_dir = os.path.join(base_dir, str(id) + '/results')
                 list_img = os.listdir(results_dir)
                 assert len(list_img) != 0, 'No example have been created'
             else:
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
-                    os.path.join(base_dir,str(id)+'/results'))
+                                        os.path.join(base_dir, str(id) + '/results'))
 
         elif (id is None and example_path_list is not None) or (id is not None and example_path_list is not None):
             for file in example_path_list:
@@ -997,33 +654,34 @@ class Client:
             list_img = example_path_list
             results_dir = ""
 
-
         object_name_list = []
         for img_path in list_img:
-            file_path = os.path.join(results_dir,img_path)
+            file_path = os.path.join(results_dir, img_path)
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("Can't locate file @ %s" % (file_path))
             if id is None and example_path_list is not None:
-                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(self.training_id), "results",file_path.split('/')[-1])
+                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(self.training_id), "results",
+                                           file_path.split('/')[-1])
             elif id is not None and example_path_list is not None:
-                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(id), "results",file_path.split('/')[-1])
+                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(id), "results",
+                                           file_path.split('/')[-1])
             else:
-                OBJECT_NAME  = file_path
+                OBJECT_NAME = file_path
 
-            response =self._get_presigned_url('post',OBJECT_NAME)
+            response = self._get_presigned_url('post', OBJECT_NAME)
             to_send = {"project_token": self.project_token, "object_name": OBJECT_NAME}
 
             try:
                 with open(file_path, 'rb') as f:
                     files = {'file': (OBJECT_NAME, f)}
                     http_response = requests.post(response['url'], data=response['fields'], files=files)
-                    print('http:',http_response.status_code)
+                    print('http:', http_response.status_code)
                 if http_response.status_code == 204:
                     object_name_list.append(OBJECT_NAME)
             except:
                 raise NetworkError("Could not upload examples to s3")
 
-        to_send2 = {"project_token": self.project_token,"network_id": self.network_id,
+        to_send2 = {"project_token": self.project_token, "network_id": self.network_id,
                     "training_id": self.training_id, "urls": object_name_list}
         try:
             r = requests.post(self.host + 'post_preview', data=json.dumps(to_send2), headers=self.auth)
@@ -1034,7 +692,7 @@ class Client:
         except:
             raise NetworkError("Could not upload to Picsell.ia Backend")
 
-    def send_model(self,file_path=None):
+    def send_model(self, file_path=None):
 
         """Send frozen graph for inference to Picsell.ia Platform
 
@@ -1045,25 +703,26 @@ class Client:
 
         """
 
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "project_token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
+                                                                                              "host") or not hasattr(
+                self, "project_token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
 
-        if file_path!=None:
+        if file_path != None:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("File not found")
             file_name = file_path.split('/')[-1]
-            self.OBJECT_NAME = '{}/{}/{}'.format(self.network_id,self.training_id,file_name)
+            self.OBJECT_NAME = os.path.join(self.network_id, self.training_id, file_name)
         else:
             file_path = '{}/{}/saved_model.pb'.format(self.exported_model)
-            self.OBJECT_NAME = '{}/{}/saved_model.pb'.format(self.network_id,self.training_id)
+            self.OBJECT_NAME = os.path.join(self.network_id, self.training_id,'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
 
-        if self._complete_part_upload(parts,self.OBJECT_NAME,'model'):
-
+        if self._complete_part_upload(parts, self.OBJECT_NAME, 'model'):
             print("Your exported model have been uploaded successfully to our cloud.")
 
-    def send_checkpoints(self,index_path=None,data_path=None, config_path=None):
+    def send_checkpoints(self, index_path=None, data_path=None, config_path=None):
 
         """Send frozen graph for inference to Picsell.ia Platform
 
@@ -1074,7 +733,9 @@ class Client:
 
         """
 
-        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "host") or not hasattr(self, "project_token"):
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
+                                                                                              "host") or not hasattr(
+                self, "project_token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
         max_size = 5 * 1024 * 1024
         urls = []
@@ -1091,22 +752,22 @@ class Client:
             # data_path = data_path.split('/')[-1]
             # config_path = config_path.split('/')[-1]
 
-            ckpt_index_object = os.path.join(self.checkpoint_dir,index_path.split('/')[-1])
-            ckpt_data_object = os.path.join(self.checkpoint_dir,data_path.split('/')[-1])
+            ckpt_index_object = os.path.join(self.checkpoint_dir, index_path.split('/')[-1])
+            ckpt_data_object = os.path.join(self.checkpoint_dir, data_path.split('/')[-1])
             self.OBJECT_NAME = ckpt_data_object
             if self.project_type != "classification":
-                config_object = os.path.join(self.checkpoint_dir,config_path.split('/')[-1])
+                config_object = os.path.join(self.checkpoint_dir, config_path.split('/')[-1])
 
 
         elif (index_path is None) and (data_path is None) and (config_path is None):
             ckpt_id = max([int(p.split('-')[1].split('.')[0]) for p in file_list if 'index' in p])
             ckpt_index = "model.ckpt-{}.index".format(str(ckpt_id))
-            ckpt_index_object = os.path.join(self.checkpoint_dir,ckpt_index)
+            ckpt_index_object = os.path.join(self.checkpoint_dir, ckpt_index)
             index_path = ckpt_index_object
 
             ckpt_name = "model.ckpt-{}.data".format(str(ckpt_id))
             ckpt_data = [e for e in file_list if ckpt_name in e][0]
-            ckpt_data_object = os.path.join(self.checkpoint_dir,ckpt_data)
+            ckpt_data_object = os.path.join(self.checkpoint_dir, ckpt_data)
             self.OBJECT_NAME = ckpt_data_object
             data_path = ckpt_data_object
             if self.project_type != "classification":
@@ -1118,7 +779,7 @@ class Client:
             raise ValueError("checkpoints' index and data  and config files must be sent together to ensure \
                               compatibility")
 
-        self.send_checkpoint_index(index_path,ckpt_index_object)
+        self.send_checkpoint_index(index_path, ckpt_index_object)
         print("Checkpoint index saved")
 
         if self.project_type != "classification":
@@ -1129,12 +790,11 @@ class Client:
         parts = self._upload_part(data_path)
 
         if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
-
             print("Your index checkpoint have been uploaded successfully to our cloud.")
 
-
-    def send_checkpoint_index(self,filename,object_name):
-        response = self._get_presigned_url(method='post', object_name=object_name, bucket_name="picsellia-private-model-storage")
+    def send_checkpoint_index(self, filename, object_name):
+        response = self._get_presigned_url(method='post', object_name=object_name,
+                                           bucket_name="picsellia-private-model-storage")
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
@@ -1150,16 +810,16 @@ class Client:
         except:
             raise NetworkError("Could not upload checkpoint to s3")
 
-    def send_config_file(self,filename,object_name):
-        response = self._get_presigned_url('post',object_name, bucket_name="picsellia-private-model-storage")
+    def send_config_file(self, filename, object_name):
+        response = self._get_presigned_url('post', object_name, bucket_name="picsellia-private-model-storage")
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
                 http_response = requests.post(response['url'], data=response['fields'], files=files)
-                print('http:',http_response.status_code)
+                print('http:', http_response.status_code)
             if http_response.status_code == 204:
                 index_info = {"project_token": self.project_token, "object_name": object_name,
-                            "network_id": self.network_id}
+                              "network_id": self.network_id}
                 r = requests.post(self.host + 'post_config', data=json.dumps(index_info), headers=self.auth)
                 if r.status_code != 201:
                     print(r.text)
@@ -1167,135 +827,16 @@ class Client:
         except:
             raise NetworkError("Could not upload config to s3")
 
-
-    def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
-        """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
-
-        Generator for variable needed to instantiate a tf example needed for training.
-
-        Args :
-            label_map (tf format)
-            ensemble (str) : Chose between train & test
-            annotation_type: "polygon", "rectangle" or "classification"
-
-        Yields :
-            (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                   encoded_jpg, image_format, classes_text, classes, masks)
-
-        Raises:
-            ResourceNotFoundError: If you don't have performed your trained test split yet
-                                   If images can't be opened
-
-        """
-
-        if annotation_type not in ["polygon", "rectangle", "classification"]:
-            raise InvalidQueryError("Please select a valid annotation_type")
-
-        if ensemble == "train":
-            path_list = self.train_list
-            id_list = self.train_list_id
-        else:
-            path_list = self.eval_list
-            id_list = self.eval_list_id
-
-        for path, ID in zip(path_list, id_list):
-            xmins = []
-            xmaxs = []
-            ymins = []
-            ymaxs = []
-            classes_text = []
-            classes = []
-            masks = []
-
-            internal_picture_id = ID
-
-            with open(path, 'rb') as fid:
-                encoded_jpg = fid.read()
-            encoded_jpg_io = io.BytesIO(encoded_jpg)
-            image = Image.open(encoded_jpg_io)
-            width, height = image.size
-            filename = path.encode('utf8')
-            image_format = '{}'.format(path.split('.')[-1])
-            image_format = bytes(image_format.encode('utf8'))
-
-            if annotation_type=="polygon":
-                for image_annoted in self.dict_annotations["annotations"]:
-                    if internal_picture_id == image_annoted["internal_picture_id"]:
-                        for a in image_annoted["annotations"]:
-                            try:
-                                if "polygon" in a.keys():
-                                    geo = a["polygon"]["geometry"]
-                                    poly = []
-                                    for coord in geo:
-                                        poly.append([[coord["x"], coord["y"]]])
-
-                                    poly = np.array(poly, dtype=np.float32)
-                                    mask = np.zeros((height, width), dtype=np.uint8)
-                                    mask = Image.fromarray(mask)
-                                    ImageDraw.Draw(mask).polygon(poly, outline=1, fill=1)
-                                    maskByteArr = io.BytesIO()
-                                    mask.save(maskByteArr, format="PNG")
-                                    maskByteArr = maskByteArr.getvalue()
-                                    masks.append(maskByteArr)
-
-                                    x, y, w, h = cv2.boundingRect(poly)
-                                    xmins.append(x / width)
-                                    xmaxs.append((x + w) / width)
-                                    ymins.append(y / height)
-                                    ymaxs.append((y + h) / height)
-                                    classes_text.append(a["label"].encode("utf8"))
-                                    label_id = label_map[a["label"]]
-                                    classes.append(label_id)
-
-                            except:
-                                pass
-                yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                encoded_jpg, image_format, classes_text, classes, masks)
-
-            if annotation_type=="rectangle":
-                for image_annoted in self.dict_annotations["annotations"]:
-                    if internal_picture_id == image_annoted["internal_picture_id"]:
-                        for a in image_annoted["annotations"]:
-                            try:
-                                if 'rectangle' in a.keys():
-                                    xmin = a["rectangle"]["top"]
-                                    xmax = xmin + a["rectangle"]["width"]
-                                    ymin = a["rectangle"]["left"]
-                                    ymax = ymin + a["rectangle"]["height"]
-                                    xmins.append(xmin/width)
-                                    xmaxs.append(xmax/width)
-                                    ymins.append(ymin/height)
-                                    ymaxs.append(ymax/height)
-                                    classes_text.append(a["label"].encode("utf8"))
-                                    label_id = label_map[a["label"]]
-                                    classes.append(label_id)
-                            except:
-                                pass
-
-                yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                    encoded_jpg, image_format, classes_text, classes)
-
-            if annotation_type=="classification":
-                for image_annoted in self.dict_annotations["annotations"]:
-                    if internal_picture_id == image_annoted["internal_picture_id"]:
-                        for a in image_annoted["annotations"]:
-                            classes_text.append(a["label"].encode("utf8"))
-                            label_id = label_map[a["label"]]
-                            classes.append(label_id)
-
-                yield (width, height, filename, encoded_jpg, image_format,
-                    classes_text, classes)
-
     def get_dataset_list(self):
         r = requests.get(self.host + 'get_dataset_list', headers=self.auth)
         dataset_names = r.json()["dataset_names"]
         for e in dataset_names:
-            print("\t",e)
+            print("\t", e)
 
-    def create_dataset(self,dataset_name):
+    def create_dataset(self, dataset_name):
         if not isinstance(dataset_name, str):
             raise ValueError('dataset_name must be a string not {}'
-                .format(type(dataset_name)))
+                             .format(type(dataset_name)))
         dataset_info = {"dataset_name": dataset_name}
         r = requests.get(self.host + 'create_dataset', data=json.dumps(dataset_info), headers=self.auth)
         new_dataset = r.json()["new_dataset"]
@@ -1308,22 +849,23 @@ class Client:
             print("Dataset {} created successfully".format(dataset_name))
             return dataset_id
 
-    def send_dataset_thumbnail(self,dataset_name,img_path):
+    def send_dataset_thumbnail(self, dataset_name, img_path):
         if not isinstance(dataset_name, str):
             raise ValueError('dataset_name must be a string not {}'
-                .format(type(dataset_name)))
+                             .format(type(dataset_name)))
         data = {
-            "dataset_name":dataset_name
+            "dataset_name": dataset_name
         }
         with open(img_path, 'rb') as f:
             files = {'file': (img_path, f)}
-            http_response = requests.post(self.host + 'send_dataset_thumbnail', data=data, files=files, headers=self.auth)
+            http_response = requests.post(self.host + 'send_dataset_thumbnail', data=data, files=files,
+                                          headers=self.auth)
             if http_response.status_code == 200:
                 print(http_response.text)
             else:
                 raise NetworkError("Could not upload thumbnail")
 
-    def create_and_upload_dataset(self,dataset_name,path_to_images):
+    def create_and_upload_dataset(self, dataset_name, path_to_images):
         """ Create a dataset and upload the images to Picsell.ia
 
         Args :
@@ -1337,32 +879,32 @@ class Client:
         """
         if not isinstance(dataset_name, str):
             raise ValueError('dataset_name must be a string not {}'
-                .format(type(dataset_name)))
+                             .format(type(dataset_name)))
 
         if not isinstance(path_to_images, str):
             raise ValueError('path_to_images must be a string not {}'
-                .format(type(path_to_images)))
+                             .format(type(path_to_images)))
 
         if not os.path.isdir(path_to_images):
             raise FileNotFoundError('{} is not a directory'
-                .format(path_to_images))
+                                    .format(path_to_images))
 
         dataset_id = self.create_dataset(dataset_name)
         print("Dataset created, starting file upload...")
         image_list = os.listdir(path_to_images)
-        thumb_path = os.path.join(path_to_images,image_list[0])
-        self.send_dataset_thumbnail(dataset_name,thumb_path)
-        if len(image_list)>0:
+        thumb_path = os.path.join(path_to_images, image_list[0])
+        self.send_dataset_thumbnail(dataset_name, thumb_path)
+        if len(image_list) > 0:
             object_name_list = []
             image_name_list = []
             sizes_list = []
             for img_path in image_list:
-                file_path = os.path.join(path_to_images,img_path)
+                file_path = os.path.join(path_to_images, img_path)
                 if not os.path.isfile(file_path):
                     raise FileNotFoundError("Can't locate file @ %s" % (file_path))
-                OBJECT_NAME = os.path.join(dataset_id,img_path)
+                OBJECT_NAME = os.path.join(dataset_id, img_path)
 
-                response =self._get_presigned_url(method='post',object_name=OBJECT_NAME,bucket_name='picsell-ui')
+                response = self._get_presigned_url(method='post', object_name=OBJECT_NAME, bucket_name='picsell-ui')
                 to_send = {"object_name": OBJECT_NAME}
 
                 try:
@@ -1371,11 +913,11 @@ class Client:
                     with open(file_path, 'rb') as f:
                         files = {'file': (OBJECT_NAME, f)}
                         http_response = requests.post(response['url'], data=response['fields'], files=files)
-                        print('http:',http_response.status_code)
+                        print('http:', http_response.status_code)
                     if http_response.status_code == 204:
                         object_name_list.append(OBJECT_NAME)
                         image_name_list.append(img_path)
-                        sizes_list.append([width,height])
+                        sizes_list.append([width, height])
                 except:
                     raise NetworkError("Could not upload examples to s3")
 
@@ -1383,15 +925,15 @@ class Client:
                         "object_list": object_name_list, "image_list": image_list,
                         "sizes_list": sizes_list}
             try:
-                r = requests.post(self.host + 'create_pictures_for_dataset', data=json.dumps(to_send2), headers=self.auth)
+                r = requests.post(self.host + 'create_pictures_for_dataset', data=json.dumps(to_send2),
+                                  headers=self.auth)
                 if r.status_code != 200:
                     raise ValueError("Errors.")
                 print("A snapshot of results has been saved to the platform")
             except:
                 raise NetworkError("Could not upload to Picsell.ia Backend")
 
-
-    def upload_annotations(self, annotations,dataset_name,project_token, format='picsellia'):
+    def upload_annotations(self, annotations, dataset_name, project_token, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
         Please find in our Documentation the annotations format acceoted to upload
@@ -1407,53 +949,53 @@ class Client:
         """
         if not isinstance(format, str):
             raise ValueError('format must be a string not {}'
-                .format(type(format)))
+                             .format(type(format)))
 
         if format != 'picsellia':
             if not isinstance(annotations, list):
                 raise ValueError('list of annotations in images must be a list not {}'
-                    .format(type(annotations)))
+                                 .format(type(annotations)))
 
             annotation_list = []
             for i, image_dict in enumerate(annotations):
                 if not isinstance(image, dict):
                     raise ValueError('annotations by image must be a dict not {}, in image n°{}'
-                        .format(type(image),i))
+                                     .format(type(image), i))
 
                 image = json.loads(image_dict)
                 image_annotations = []
                 if not isinstance(image["image_id"], str):
                     raise ValueError('image_id must be a string not {}'
-                        .format(type(image["image_id"])))
+                                     .format(type(image["image_id"])))
 
                 if not isinstance(image["image_name"], str):
                     raise ValueError('image_name must be a string not {}'
-                        .format(type(image["image_name"])))
+                                     .format(type(image["image_name"])))
 
-                for j,annotation_dict in enumerate(image["annotations"]):
+                for j, annotation_dict in enumerate(image["annotations"]):
                     if not isinstance(annotation, list):
                         raise ValueError('annotation must be a dict not {}, in annotation n°{}'
-                            .format(type(annotation),j))
+                                         .format(type(annotation), j))
 
                     annotation = json.loads(annotation_dict)
                     if not isinstance(annotation["coordinates"], list):
                         raise ValueError('coordinates must be a list not {}, in annotation n°{}'
-                            .format(type(annotation["coordinates"]),j))
+                                         .format(type(annotation["coordinates"]), j))
 
                     if not isinstance(annotation["type"], str):
                         raise ValueError('type of annotation must be a list not {}, in annotation n°{}'
-                            .format(type(annotation["type"]),j))
+                                         .format(type(annotation["type"]), j))
 
                     if not isinstance(annotation["label"], str):
                         raise ValueError('label of annotation must be a list not {}, in annotation n°{}'
-                            .format(type(annotation["label"]),j))
+                                         .format(type(annotation["label"]), j))
 
                     annotation_json = {
                         'type': annotation["type"],
                         'label': annotation["label"],
                     }
 
-                    if annotation["type"]=="polygon":
+                    if annotation["type"] == "polygon":
                         geometry = annotation["coordinates"]
                         annotation_json['polygon'] = {
                             'geometry': geometry
@@ -1480,7 +1022,7 @@ class Client:
         else:
             if not isinstance(annotations, dict):
                 raise ValueError('Picsellia annotations are a dict not {}'
-                    .format(type(annotations)))
+                                 .format(type(annotations)))
             annotation_list = annotations["annotations"]
 
         to_send = {
@@ -1498,28 +1040,29 @@ class Client:
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
-
     def upload_and_create(self):
-        print("Welcome to the Complete experiment uploader of Picsell.ia\nSimple GUI to push a model to the community\n")
+        print(
+            "Welcome to the Complete experiment uploader of Picsell.ia\nSimple GUI to push a model to the community\n")
         model_name = input("1) Select a the desired name of the model you're about to upload\n")
-        self.init_model(model_name)
+        self.create_network(model_name)
 
         if self.project_type != "classification":
-            print("2) Let's upload  3 important files..\n First, please select the latest .data, .index and pipeline.config files\n")
-            file_list = easygui.fileopenbox(filetypes=["*.index","*.data*", "*.config"], multiple=True)
+            print(
+                "2) Let's upload  3 important files..\n First, please select the latest .data, .index and pipeline.config files\n")
+            file_list = easygui.fileopenbox(filetypes=["*.index", "*.data*", "*.config"], multiple=True)
         else:
             print("2) Let's upload  2 important files..\n First, please select the latest .data, .index files\n")
-            file_list = easygui.fileopenbox(filetypes=["*.index","*.data*"], multiple=True)
+            file_list = easygui.fileopenbox(filetypes=["*.index", "*.data*"], multiple=True)
 
         index_path = ""
         data_path = ""
-        config_path=""
+        config_path = ""
         for f in file_list:
             if "index" in f:
-                ckpt_index_object = os.path.join(self.checkpoint_dir,f.split('/')[-1])
+                ckpt_index_object = os.path.join(self.checkpoint_dir, f.split('/')[-1])
                 index_path = f
             elif "data" in f:
-                ckpt_data_object = os.path.join(self.checkpoint_dir,f.split('/')[-1])
+                ckpt_data_object = os.path.join(self.checkpoint_dir, f.split('/')[-1])
                 self.OBJECT_NAME = ckpt_data_object
                 data_path = f
             if self.project_type != "classification":
@@ -1533,16 +1076,13 @@ class Client:
         if config_path == "" and self.project_type != "classification":
             raise FileNotFoundError("No config file found")
 
-
-
         print("We will upload files:")
         print("\n ", index_path)
         print("\n ", data_path)
         if self.project_type != "classification":
             print("\n ", config_path)
 
-
-        self.send_checkpoint_index(index_path,ckpt_index_object)
+        self.send_checkpoint_index(index_path, ckpt_index_object)
         print("Checkpoint index saved")
 
         if self.project_type != "classification":
@@ -1553,7 +1093,6 @@ class Client:
         parts = self._upload_part(data_path)
 
         if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
-
             print("Your index checkpoint have been uploaded successfully to our cloud.")
 
         a = input("Do you have some training logs in json format to send ?(Y/N) ")
@@ -1563,15 +1102,15 @@ class Client:
 
         a = input("Do you have some visual examples to send ?(Y/N) ")
         if a.lower() == 'y':
-            list_files = easygui.fileopenbox(filetypes=["*.png","*.jpg", "*.jpeg"], multiple=True)
+            list_files = easygui.fileopenbox(filetypes=["*.png", "*.jpg", "*.jpeg"], multiple=True)
             if not len(list_files) == 0:
                 self.send_examples(example_path_list=list_files)
 
         a = input("Do you have a json maping your label with your class ?(y/n) ")
-        if a.lower() =='y':
+        if a.lower() == 'y':
             print("Please choose your json file")
             json_path = easygui.fileopenbox(filetypes="*.json")
-            self.send_labelmap(label_path=json_path)
+            FileProcessor(self).send_labelmap(label_path=json_path)
         print("Ok now, let's send your frozen graph to wrap it up")
         model_path = easygui.fileopenbox(filetypes="*.pb")
         if not model_path == "":
@@ -1579,22 +1118,125 @@ class Client:
 
         print("Alright ! Your model is fully uploaded to our hub !")
 
+    def _get_presigned_url(self, method, object_name, bucket_name=None):
+        if bucket_name is None:
+            to_send = {"object_name": object_name}
+            if method == 'post':
+                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
+            if method == 'get':
+                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 200:
+                raise ValueError("Errors.")
+            http_response = r.json()["url"]
+            return http_response
+        else:
+            to_send = {"object_name": object_name, "bucket_name": bucket_name, "project_token": self.project_token}
 
+            if method == 'post':
+                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
+            if method == 'get':
+                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 200:
+                raise ValueError("Errors.")
+            http_response = r.json()["url"]
+            return http_response
 
+    def _init_multipart(self):
+        """Initialize the upload to saved Checkpoints or SavedModel
 
+        Raises:
+            NetworkError: If it impossible to initialize upload
+            ResourceNotFoundError: If no saved_model saved
 
+        """
 
+        try:
+            to_send = {"object_name": self.OBJECT_NAME}
+            r = requests.get(self.host + 'init_upload', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 200:
+                print(r.text)
+                return False
+            self.uploadId = r.json()["upload_id"]
 
+        except:
+            raise NetworkError('Impossible to initialize Upload')
 
+    def _get_url_for_part(self, no_part):
+        """Get a pre-signed url to upload a part of Checkpoints or SavedModel
 
+        Raises:
+            NetworkError: If it impossible to initialize upload
+
+        """
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
+                                                                                              "OBJECT_NAME") or not hasattr(
+                self, "uploadId"):
+            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
+        try:
+            to_send = {"project_token": self.project_token, "object_name": self.OBJECT_NAME,
+                       "upload_id": self.uploadId, "part_no": no_part}
+            r = requests.get(self.host + 'get_post_url', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 200:
+                raise NetworkError("Impossible to get an url.. because :\n%s" % (r.text))
+            return r.json()["url"]
+        except:
+            raise NetworkError("Impossible to get an url..")
+
+    def _upload_part(self, file_path):
+        try:
+            max_size = 5 * 1024 * 1024
+            urls = []
+            file_size = os.path.getsize(file_path)
+            upload_by = int(file_size / max_size) + 1
+            with open(file_path, 'rb') as f:
+                for part in range(1, upload_by + 1):
+                    signed_url = self._get_url_for_part(part)
+                    urls.append(signed_url)
+                parts = []
+                for num, url in enumerate(urls):
+                    part = num + 1
+                    done = int(50 * num / len(urls))
+                    try:
+                        file_data = f.read(max_size)
+                        res = requests.put(url, data=file_data)
+                        if res.status_code != 200:
+                            raise NetworkError("Impossible to put part no {}\n because {}".format(num + 1, res.text))
+                        etag = res.headers['ETag']
+                        parts.append({'ETag': etag, 'PartNumber': part})
+                        sys.stdout.write("\r[%s%s]" % ('=' * (done - 1) + '>', ' ' * (50 - done)))
+                        sys.stdout.flush()
+                    except:
+                        raise NetworkError("Impossible to put part no {}".format(num + 1))
+                return parts
+        except:
+            raise NetworkError("Impossible to upload frozen graph to Picsell.ia backend")
+
+    def _complete_part_upload(self, parts, object_name, file_type):
+
+        """Complete the upload a part of Checkpoints or SavedModel
+
+        Raises:
+            NetworkError: If it impossible to initialize upload
+
+        """
+        if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self, "OBJECT_NAME"):
+            raise ResourceNotFoundError("Please initialize upload with _init_multipart()")
+        try:
+            to_send = {"project_token": self.project_token, "object_name": object_name, "file_type": file_type,
+                       "upload_id": self.uploadId, "parts": parts, "network_id": self.network_id,
+                       "training_id": self.training_id}
+
+            r = requests.get(self.host + 'complete_upload', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code != 201:
+                NetworkError("Impossible to get an url.. because :\n%s" % (r.text))
+            return True
+        except:
+            raise NetworkError("Impossible to get an url..")
 
 if __name__ == '__main__':
-    client = Client(api_token="03a0df321ccf19fad8eff1439e2bd996c6363d47", host="https://backstage.picsellia.com/sdk/")
-    client.init_project(project_token="d3652cdb-c728-41de-89b4-939623d84dbc")
-    #client.init_model("car_bruises_mask_rcnn")
-    #client.dl_annotations()
-    #client.local_pic_save()
-    #client.dl_latest_saved_model('models/')
-    #label_path = easygui.fileopenbox()
-    #client.send_labelmap(label_path=label_path)
-    client.upload_and_create()
+    print("Trying to create a new model ")
+    client = Client(api_token="bdcfce35e0ff716d76a1bd549cc0804c19cb0f23", host="http://localhost:8000/sdk/")
+    client.checkout_project(project_token="bf6e4395-01ba-40a3-81a6-3e5666490128")
+    client.checkout_network('test_up')
+    client.dl_annotations()
+    client.dl_pictures(prop=0.5)
