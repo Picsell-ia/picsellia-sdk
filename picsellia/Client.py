@@ -337,10 +337,11 @@ class Client:
             index_path = ""
             data_path = ""
             config_path = ""
+            a = 0
             for id in training_ids:
                 path = os.path.join(self.project_name, self.network_name, str(id), "checkpoint")
                 if utils.is_checkpoint(path, self.project_type):
-                    a = 0
+
                     while (a not in ["y", "yes", "n", "no"]):
                         a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
 
@@ -358,6 +359,7 @@ class Client:
                     path_deep = os.path.join(self.project_name, self.network_name, str(id), "checkpoint", "origin")
 
                     if utils.is_checkpoint(path_deep, self.project_type):
+
                         while (a not in ["y", "yes", "n", "no"]):
                             a = input("Found original checkpoints files from training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
 
