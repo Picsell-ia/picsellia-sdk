@@ -91,7 +91,7 @@ class Client:
                     raise ResourceNotFoundError(
                         "Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
-    def create_network(self, network_name, orphan= None):
+    def create_network(self, network_name, orphan=False):
         """ Initialise the NeuralNet instance on Picsell.ia server.
             If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -188,7 +188,7 @@ class Client:
         assert isinstance(network_name, str), "model name must be string, got %s" % type(network_name)
 
         if network_name not in self.network_names:
-            raise InvalidQueryError("The Network name you provided does not exists for this project")
+            raise ResourceNotFoundError("The Network name you provided does not exists for this project")
 
         to_send = {"model_name": network_name, "project_token": self.project_token}
 
@@ -212,6 +212,45 @@ class Client:
         print("You already have some checkpoints on your machine, we'll start training from there.")
         return self.model_selected
 
+    def reset_network(self, network_name):
+        """ Reset your training checkpoints to the origin.
+
+        Args:
+            network_name (str): It's simply the name you want to give to your NeuralNet
+                              For example, SSD_Picsellia
+
+        Raises:
+            AuthenticationError: If `project_token` does not match the provided project_token on the platform.
+            NetworkError: If Picsell.ia server not responding or host is incorrect.
+        """
+
+        assert isinstance(network_name, str), "model name must be string, got %s" % type(network_name)
+
+        print("Ok.. We'll reset your project to the origin checkpoint")
+        if network_name not in self.network_names:
+            raise ResourceNotFoundError("The Network name you provided does not exists for this project")
+
+        to_send = {"model_name": network_name, "project_token": self.project_token, "reset": True}
+
+        try:
+            r = requests.get(self.host + 'init_model', data=json.dumps(to_send), headers=self.auth)
+        except:
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
+
+        if r.status_code == 400:
+            raise AuthenticationError(
+                'The project_token provided does not match any of the known project_token for profile.')
+
+        response = r.json()
+        self.network_id = response["network_id"]
+        self.training_id = response["training_id"]
+        self.network_name = network_name
+        self.dict_annotations = {}
+        self.setup_dirs()
+        self.model_selected = self.dl_checkpoints(response, reset=True)
+        print("You already have some checkpoints on your machine, we'll start training from there.")
+        return self.model_selected
 
     def setup_dirs(self):
 
@@ -258,7 +297,7 @@ class Client:
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
 
-    def dl_checkpoints(self, response, checkpoint_path=None):
+    def dl_checkpoints(self, response, checkpoint_path=None, reset=False):
 
         if checkpoint_path is not None:
             if not os.path.isdir(checkpoint_path):
@@ -290,56 +329,69 @@ class Client:
 
 
         # list all existing training id
+        if not reset:
+            list_training = os.listdir(os.path.join(self.project_name, self.network_name))
+            training_ids = sorted([int(e) for e in list_training], reverse=True)
+            print("available training id , ", training_ids)
 
-        list_training = os.listdir(os.path.join(self.project_name, self.network_name))
-        training_ids = sorted([int(e) for e in list_training], reverse=True)
-        print("available training id , ", training_ids)
+            index_path = ""
+            data_path = ""
+            config_path = ""
+            a = 0
+            for id in training_ids:
+                path = os.path.join(self.project_name, self.network_name, str(id), "checkpoint")
+                if utils.is_checkpoint(path, self.project_type):
 
-        index_path = ""
-        data_path = ""
-        config_path = ""
-        for id in training_ids:
-            path = os.path.join(self.project_name, self.network_name, str(id), "checkpoint")
-            if utils.is_checkpoint(path, self.project_type):
-                a = 0
-                while (a not in ["y", "yes", "n", "no"]):
-                    a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
-
-                if a.lower() == 'y' or a.lower()=='yes':
-                    print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
-                                                                                               self.network_name,
-                                                                                               str(self.training_id),
-                                                                                           "checkpoint"))
-                    return path
-
-                else:
-                    continue
-
-            else:
-                path_deep = os.path.join(self.project_name, self.network_name, str(id), "checkpoint", "origin")
-
-                if utils.is_checkpoint(path_deep, self.project_type):
                     while (a not in ["y", "yes", "n", "no"]):
-                        a = input("Found original checkpoints files from training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+                        a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
 
                     if a.lower() == 'y' or a.lower()=='yes':
                         print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
                                                                                                    self.network_name,
                                                                                                    str(self.training_id),
                                                                                                "checkpoint"))
-                        return path_deep
+                        return path
 
                     else:
                         continue
+
                 else:
-                    continue
+                    path_deep = os.path.join(self.project_name, self.network_name, str(id), "checkpoint", "origin")
+
+                    if utils.is_checkpoint(path_deep, self.project_type):
+
+                        while (a not in ["y", "yes", "n", "no"]):
+                            a = input("Found original checkpoints files from training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
+
+                        if a.lower() == 'y' or a.lower()=='yes':
+                            print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
+                                                                                                       self.network_name,
+                                                                                                       str(self.training_id),
+                                                                                                   "checkpoint"))
+                            return path_deep
+
+                        else:
+                            continue
+                    else:
+                        continue
+
+        else:
+            try:
+                path_to_look = os.path.join(self.project_name, self.network_name, "0", "checkpoint", "origin")
+                if os.path.isdir(path_to_look):
+                    if utils.is_checkpoint(path_to_look, self.project_type):
+                        print("Found the originals checkpoints @ %s " % path_to_look)
+                        return path_to_look
+            except:
+                pass
+
 
 
         path_to_origin = os.path.join(self.checkpoint_dir, "origin")
         if not os.path.isdir(path_to_origin):
             os.makedirs(path_to_origin)
 
-        url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_name='picsellia-private-model-storage')
+        url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_index.split('/')[-1])
         with open(checkpoint_file, 'wb') as handler:
             response = requests.get(url_index, stream=True)
@@ -359,7 +411,7 @@ class Client:
                     sys.stdout.flush()
                 print('Checkpoint Index downloaded')
 
-        url_config = self._get_presigned_url('get', self.config_file, bucket_name="picsellia-private-model-storage")
+        url_config = self._get_presigned_url('get', self.config_file, bucket_model=True)
         config_file = os.path.join(path_to_origin, self.config_file.split('/')[-1])
         with open(config_file, 'wb') as handler:
             print("Downloading %s" % self.config_file)
@@ -379,7 +431,7 @@ class Client:
                     done = int(50 * dl / total_length)
                 print('Config downloaded')
 
-        url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_name="picsellia-private-model-storage")
+        url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_data.split('/')[-1])
         with open(checkpoint_file, 'wb') as handler:
             print("Downloading %s" % self.checkpoint_data)
@@ -461,7 +513,7 @@ class Client:
         if object_name == 0:
             raise ValueError("There is no saved model on our backend for this project")
 
-        url = self._get_presigned_url("get", object_name, bucket_name="picsellia-private-model-storage")
+        url = self._get_presigned_url("get", object_name, bucket_model=True)
 
         with open(os.path.join(path_to_save, 'saved_model.pb'), 'wb') as handler:
             print("Downloading exported model..")
@@ -477,13 +529,10 @@ class Client:
                 sys.stdout.flush()
                 print('Exported model downloaded @ %s' % path_to_save)
 
-    def dl_pictures(self, prop=0.8):
+    def dl_pictures(self):
         """Download your training set on the machine (Use it to dl images to Google Colab etc.)
            Save it to /project_id/images/*
            Perform train_test_split & send the repartition to Picsell.ia Platform
-
-        Args :
-            prop (float) Percentage of Instances used for training.
 
         Raises:
             ResourceNotFoundError : If no annotations in the Picsell.ia Client yet or images can't be downloaded
@@ -500,11 +549,6 @@ class Client:
         cnt = 0
 
         print("Downloading PNG images to your machine ...")
-
-        try:
-            self.index_url = utils.train_valid_split_obj_simple(self.dict_annotations,prop)
-        except:
-            raise ProcessingError("Error during Train Test Split optimization, do you have classes with 0 instances ?")
 
         dl = 0
         total_length = len(self.dict_annotations["images"])
@@ -631,7 +675,7 @@ class Client:
         if not hasattr(self, "training_id") or not hasattr(self, "network_id") or not hasattr(self,
                                                                                               "host") or not hasattr(
                 self, "project_token"):
-            raise ResourceNotFoundError("Please initialize model with init_model()")
+            raise ResourceNotFoundError("Please initialize model first")
 
         if metrics_path is not None:
             if not os.path.isfile(metrics_path):
@@ -748,10 +792,16 @@ class Client:
         if file_path != None:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("File not found")
+
+            if not file_path.endswith('.pb'):
+                raise InvalidQueryError("wrong file type, please send a .pb file")
+
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id), file_name)
         else:
             file_path = os.path.join(self.exported_model_dir, 'saved_model/saved_model.pb')
+            if not file_path.endswith('.pb'):
+                raise InvalidQueryError("wrong file type, please send a .pb file")
             self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
@@ -831,7 +881,7 @@ class Client:
 
     def send_checkpoint_index(self, filename, object_name):
         response = self._get_presigned_url(method='post', object_name=object_name,
-                                           bucket_name="picsellia-private-model-storage")
+                                           bucket_model=True)
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
@@ -848,7 +898,7 @@ class Client:
             raise NetworkError("Could not upload checkpoint to s3")
 
     def send_config_file(self, filename, object_name):
-        response = self._get_presigned_url('post', object_name, bucket_name="picsellia-private-model-storage")
+        response = self._get_presigned_url('post', object_name, bucket_model=True)
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
@@ -941,7 +991,7 @@ class Client:
                     raise FileNotFoundError("Can't locate file @ %s" % (file_path))
                 OBJECT_NAME = os.path.join(dataset_id, img_path)
 
-                response = self._get_presigned_url(method='post', object_name=OBJECT_NAME, bucket_name='picsell-ui')
+                response = self._get_presigned_url(method='post', object_name=OBJECT_NAME)
                 to_send = {"object_name": OBJECT_NAME}
 
                 try:
@@ -1008,120 +1058,20 @@ class Client:
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
-    def upload_and_create(self):
-        print(
-            "Welcome to the Complete experiment uploader of Picsell.ia\nSimple GUI to push a model to the community\n")
-        model_name = input("1) Select a the desired name of the model you're about to upload\n")
-        self.create_network(model_name, orphan=True)
 
-        if self.project_type != "classification":
-            print(
-                "2) Let's upload  3 important files..\n First, please select the latest .data, .index and pipeline.config files\n")
-            file_list = easygui.fileopenbox(filetypes=["*.index", "*.data*", "*.config"], multiple=True)
-        else:
-            print("2) Let's upload  2 important files..\n First, please select the latest .data, .index files\n")
-            file_list = easygui.fileopenbox(filetypes=["*.index", "*.data*"], multiple=True)
 
-        index_path = ""
-        data_path = ""
-        config_path = ""
-        for f in file_list:
-            if "index" in f:
-                ckpt_index_object = os.path.join(self.checkpoint_dir, f.split('/')[-1])
-                index_path = f
-            elif "data" in f:
-                ckpt_data_object = os.path.join(self.checkpoint_dir, f.split('/')[-1])
-                self.OBJECT_NAME = ckpt_data_object
-                data_path = f
-            if self.project_type != "classification":
-                if "pipeline" in f:
-                    config_path = f
-                    config_object = os.path.join(self.checkpoint_dir, "pipeline.config")
+    def _get_presigned_url(self, method, object_name, bucket_model=False):
 
-        if index_path == "" or data_path == "":
-            raise FileNotFoundError("The selected file are not the .data and .index files")
+        to_send = {"object_name": object_name, "bucket_model": bucket_model, "project_token": self.project_token}
 
-        if config_path == "" and self.project_type != "classification":
-            raise FileNotFoundError("No config file found")
+        if method == 'post':
+            r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
+        if method == 'get':
+            r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
+        if r.status_code != 200:
+            raise ValueError("Errors.")
 
-        print("We will upload files:")
-        print("\n ", index_path)
-        print("\n ", data_path)
-        if self.project_type != "classification":
-            print("\n ", config_path)
-
-        self.send_checkpoint_index(index_path, ckpt_index_object)
-        print("Checkpoint index saved")
-
-        if self.project_type != "classification":
-            self.send_config_file(config_path, config_object)
-        print("Config file saved")
-
-        self._init_multipart()
-        parts = self._upload_part(data_path)
-
-        if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
-            print("Your index checkpoint have been uploaded successfully to our cloud.")
-
-        a = input("Do you have some training logs in json format to send ?(Y/N) ")
-        if a.lower() == "y":
-            try:
-                json_path = easygui.fileopenbox(filetypes="*.json")
-            except:
-                json_path = input("GUI not supported please enter your path : ")
-            self.send_logs(logs_path=json_path)
-
-        a = input("Do you have some visual examples to send ?(Y/N) ")
-        if a.lower() == 'y':
-            try:
-                list_files = easygui.fileopenbox(filetypes=["*.png", "*.jpg", "*.jpeg"], multiple=True)
-            except:
-                list_files = input("GUI not supported please enter the path of one image : ")
-            if not len(list_files) == 0:
-                self.send_examples(example_path_list=list_files)
-
-        a = input("Do you have a json maping your label with your class ?(y/n) ")
-        if a.lower() == 'y':
-            print("Please choose your json file")
-            try:
-                json_path = easygui.fileopenbox(filetypes="*.json")
-            except:
-                json_path = input("GUI not supported please enter your path : ")
-            self.send_labelmap(label_path=json_path)
-
-        print("Ok now, let's send your frozen graph to wrap it up")
-        try:
-            model_path = easygui.fileopenbox(filetypes="*.pb")
-        except:
-            model_path = input("GUI not supported please enter your path : ")
-
-        if not model_path == "":
-            self.send_model(model_path)
-
-        print("Alright ! Your model is fully uploaded to our hub !")
-
-    def _get_presigned_url(self, method, object_name, bucket_name=None):
-        if bucket_name is None:
-            to_send = {"object_name": object_name}
-            if method == 'post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method == 'get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
-        else:
-            to_send = {"object_name": object_name, "bucket_name": bucket_name, "project_token": self.project_token}
-
-            if method == 'post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method == 'get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
+        return r.json()["url"]
 
     def _init_multipart(self):
         """Initialize the upload to saved Checkpoints or SavedModel
