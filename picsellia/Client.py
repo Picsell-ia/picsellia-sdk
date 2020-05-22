@@ -391,7 +391,7 @@ class Client:
         if not os.path.isdir(path_to_origin):
             os.makedirs(path_to_origin)
 
-        url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_name='picsellia-private-model-storage')
+        url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_index.split('/')[-1])
         with open(checkpoint_file, 'wb') as handler:
             response = requests.get(url_index, stream=True)
@@ -411,7 +411,7 @@ class Client:
                     sys.stdout.flush()
                 print('Checkpoint Index downloaded')
 
-        url_config = self._get_presigned_url('get', self.config_file, bucket_name="picsellia-private-model-storage")
+        url_config = self._get_presigned_url('get', self.config_file, bucket_model=True)
         config_file = os.path.join(path_to_origin, self.config_file.split('/')[-1])
         with open(config_file, 'wb') as handler:
             print("Downloading %s" % self.config_file)
@@ -431,7 +431,7 @@ class Client:
                     done = int(50 * dl / total_length)
                 print('Config downloaded')
 
-        url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_name="picsellia-private-model-storage")
+        url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_data.split('/')[-1])
         with open(checkpoint_file, 'wb') as handler:
             print("Downloading %s" % self.checkpoint_data)
@@ -513,7 +513,7 @@ class Client:
         if object_name == 0:
             raise ValueError("There is no saved model on our backend for this project")
 
-        url = self._get_presigned_url("get", object_name, bucket_name="picsellia-private-model-storage")
+        url = self._get_presigned_url("get", object_name, bucket_model=True)
 
         with open(os.path.join(path_to_save, 'saved_model.pb'), 'wb') as handler:
             print("Downloading exported model..")
@@ -792,10 +792,16 @@ class Client:
         if file_path != None:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("File not found")
+
+            if not file_path.endswith('.pb'):
+                raise InvalidQueryError("wrong file type, please send a .pb file")
+
             file_name = file_path.split('/')[-1]
             self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id), file_name)
         else:
             file_path = os.path.join(self.exported_model_dir, 'saved_model/saved_model.pb')
+            if not file_path.endswith('.pb'):
+                raise InvalidQueryError("wrong file type, please send a .pb file")
             self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.pb')
         self._init_multipart()
         parts = self._upload_part(file_path)
@@ -875,7 +881,7 @@ class Client:
 
     def send_checkpoint_index(self, filename, object_name):
         response = self._get_presigned_url(method='post', object_name=object_name,
-                                           bucket_name="picsellia-private-model-storage")
+                                           bucket_model=True)
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
@@ -892,7 +898,7 @@ class Client:
             raise NetworkError("Could not upload checkpoint to s3")
 
     def send_config_file(self, filename, object_name):
-        response = self._get_presigned_url('post', object_name, bucket_name="picsellia-private-model-storage")
+        response = self._get_presigned_url('post', object_name, bucket_model=True)
         try:
             with open(filename, 'rb') as f:
                 files = {'file': (filename, f)}
@@ -985,7 +991,7 @@ class Client:
                     raise FileNotFoundError("Can't locate file @ %s" % (file_path))
                 OBJECT_NAME = os.path.join(dataset_id, img_path)
 
-                response = self._get_presigned_url(method='post', object_name=OBJECT_NAME, bucket_name='picsell-ui')
+                response = self._get_presigned_url(method='post', object_name=OBJECT_NAME)
                 to_send = {"object_name": OBJECT_NAME}
 
                 try:
@@ -1123,28 +1129,18 @@ class Client:
 
 
 
-    def _get_presigned_url(self, method, object_name, bucket_name=None):
-        if bucket_name is None:
-            to_send = {"object_name": object_name}
-            if method == 'post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method == 'get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
-        else:
-            to_send = {"object_name": object_name, "bucket_name": bucket_name, "project_token": self.project_token}
+    def _get_presigned_url(self, method, object_name, bucket_model=False):
 
-            if method == 'post':
-                r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
-            if method == 'get':
-                r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 200:
-                raise ValueError("Errors.")
-            http_response = r.json()["url"]
-            return http_response
+        to_send = {"object_name": object_name, "bucket_model": bucket_model, "project_token": self.project_token}
+
+        if method == 'post':
+            r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
+        if method == 'get':
+            r = requests.get(self.host + 'generate_get_presigned_url', data=json.dumps(to_send), headers=self.auth)
+        if r.status_code != 200:
+            raise ValueError("Errors.")
+
+        return r.json()["url"]
 
     def _init_multipart(self):
         """Initialize the upload to saved Checkpoints or SavedModel
