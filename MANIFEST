@@ -6,4 +6,4 @@ picsellia/Utils.py
 picsellia/__init__.py
 picsellia/exceptions.py
 picsellia/main.py
-test/test_picsellia.py
+picsellia/test.py

@@ -7,8 +7,8 @@ import easygui
 import requests
 from PIL import Image
 from picsellia.exceptions import *
-
-
+import numpy as np
+import cv2
 class Client:
     """
     The Picsell.ia Client contains info necessary for connecting to the Picsell.ia Platform.
@@ -43,7 +43,7 @@ class Client:
                 "Server is not responding, please check your host or Picsell.ia server status on twitter")
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
-        self.supported_img_types = [".png", ".jpg", ".jpeg"]
+        self.supported_img_types = ("png", "jpg", "jpeg")
         self.label_path = ""
         print(
             "Welcome {}, Glad to have you back".format(
@@ -67,7 +67,7 @@ class Client:
         except:
             raise NetworkError(
                 "Server is not responding, please check your host or Picsell.ia server status on twitter")
-        if r.status_code == 400:
+        if r.status_code != 200:
             raise AuthenticationError(
                 'The project_token provided does not match any of the known project_token for profile.')
 
@@ -87,7 +87,8 @@ class Client:
                 raise ResourceNotFoundError("Can't find images at %s" % (self.png_dir))
 
             for filename in os.listdir(self.png_dir):
-                if not filename.endswith(self.supported_img_types):
+                ext = filename.split('.')[-1]
+                if not ext in self.supported_img_types:
                     raise ResourceNotFoundError(
                         "Found a non supported filetype (%s) in your png_dir " % (filename.split('.')[-1]))
 
@@ -122,6 +123,7 @@ class Client:
 
         if self.network_names is None:
             self.network_names = []
+
         if network_name in self.network_names:
             raise InvalidQueryError("The Network name you provided already exists for this project")
 
@@ -129,7 +131,6 @@ class Client:
 
         try:
             r = requests.get(self.host + 'init_model', data=json.dumps(to_send), headers=self.auth)
-            print(r.json())
         except:
             raise NetworkError(
                 "Server is not responding, please check your host or Picsell.ia server status on twitter")
@@ -158,7 +159,7 @@ class Client:
         print("New Network have been created")
         return None
 
-    def checkout_network(self, network_name):
+    def checkout_network(self, network_name, training_id=None):
         """ Attach the Picsell.ia Client to the desired Network.
             If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -205,12 +206,30 @@ class Client:
         response = r.json()
         self.network_id = response["network_id"]
         self.training_id = response["training_id"]
+        if training_id is not None:
+            self.training_id=training_id
         self.network_name = network_name
         self.dict_annotations = {}
+        if "index_object_name" in response["checkpoints"].keys():
+            self.checkpoint_index =  response["checkpoints"]["index_object_name"]
+        else:
+            self.checkpoint_index = None
+
+        if "data_object_name" in response["checkpoints"].keys():
+            self.checkpoint_data =  response["checkpoints"]["data_object_name"]
+
+        else:
+            self.checkpoint_data = None
+
+        if "config_file" in response["checkpoints"].keys():
+            self.config_file =  response["checkpoints"]["config_file"]
+        else:
+            self.config_file = None
         self.setup_dirs()
-        self.model_selected = self.dl_checkpoints(response)
+        self.model_selected = self.dl_checkpoints()
         print("You already have some checkpoints on your machine, we'll start training from there.")
         return self.model_selected
+
 
     def reset_network(self, network_name):
         """ Reset your training checkpoints to the origin.
@@ -248,7 +267,22 @@ class Client:
         self.network_name = network_name
         self.dict_annotations = {}
         self.setup_dirs()
-        self.model_selected = self.dl_checkpoints(response, reset=True)
+        if "index_object_name" in response["checkpoints"].keys():
+            self.checkpoint_index =  response["checkpoints"]["index_object_name"]
+        else:
+            self.checkpoint_index = None
+
+        if "data_object_name" in response["checkpoints"].keys():
+            self.checkpoint_data =  response["checkpoints"]["data_object_name"]
+
+        else:
+            self.checkpoint_data = None
+
+        if "config_file" in response["checkpoints"].keys():
+            self.config_file =  response["checkpoints"]["config_file"]
+        else:
+            self.config_file = None
+        self.model_selected = self.dl_checkpoints(reset=True)
         print("You already have some checkpoints on your machine, we'll start training from there.")
         return self.model_selected
 
@@ -296,8 +330,11 @@ class Client:
         if not os.path.isdir(self.results_dir):
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
+        if not os.path.isdir(self.exported_model_dir):
+            print("Creating directory for results of project {}".format(self.exported_model_dir))
+            os.mkdir(self.exported_model_dir)
 
-    def dl_checkpoints(self, response, checkpoint_path=None, reset=False):
+    def dl_checkpoints(self, checkpoint_path=None, reset=False):
 
         if checkpoint_path is not None:
             if not os.path.isdir(checkpoint_path):
@@ -306,21 +343,7 @@ class Client:
 
 
 
-        if "index_object_name" in response["checkpoints"].keys():
-            self.checkpoint_index =  response["checkpoints"]["index_object_name"]
-        else:
-            self.checkpoint_index = None
 
-        if "data_object_name" in response["checkpoints"].keys():
-            self.checkpoint_data =  response["checkpoints"]["data_object_name"]
-
-        else:
-            self.checkpoint_data = None
-
-        if "config_file" in response["checkpoints"].keys():
-            self.config_file =  response["checkpoints"]["config_file"]
-        else:
-            self.config_file = None
 
 
         if (self.checkpoint_index is None) or (self.checkpoint_data is None):
@@ -345,7 +368,7 @@ class Client:
                     while (a not in ["y", "yes", "n", "no"]):
                         a = input("Found checkpoints files for training %s  , do you want to use this checkpoints ? [y/n]" % (str(id)))
 
-                    if a.lower() == 'y' or a.lower()=='yes':
+                    if a.lower() == 'y' or a.lower() == 'yes':
                         print("Your next training will use checkpoint stored @ %s " % os.path.join(self.project_name,
                                                                                                    self.network_name,
                                                                                                    str(self.training_id),
@@ -377,22 +400,33 @@ class Client:
 
         else:
             try:
-                path_to_look = os.path.join(self.project_name, self.network_name, "0", "checkpoint", "origin")
-                if os.path.isdir(path_to_look):
-                    if utils.is_checkpoint(path_to_look, self.project_type):
-                        print("Found the originals checkpoints @ %s " % path_to_look)
-                        return path_to_look
+                path_to_look_0 = os.path.join(self.project_name, self.network_name, "0", "checkpoint", "origin")
+                path_to_look_1 = os.path.join(self.project_name, self.network_name, "1", "checkpoint", "origin")
+                if os.path.isdir(path_to_look_0):
+                    if utils.is_checkpoint(path_to_look_0, self.project_type):
+                        print("Found the originals checkpoints @ %s " % path_to_look_0)
+                        return path_to_look_0
+                if os.path.isdir(path_to_look_1):
+                    if utils.is_checkpoint(path_to_look_1, self.project_type):
+                        print("Found the originals checkpoints @ %s " % path_to_look_1)
+                        return path_to_look_1
             except:
                 pass
 
 
 
         path_to_origin = os.path.join(self.checkpoint_dir, "origin")
+
+
         if not os.path.isdir(path_to_origin):
             os.makedirs(path_to_origin)
 
+        for fpath in os.listdir(path_to_origin):
+            os.remove(os.path.join(path_to_origin,fpath))
         url_index = self._get_presigned_url('get', self.checkpoint_index, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_index.split('/')[-1])
+
+
         with open(checkpoint_file, 'wb') as handler:
             response = requests.get(url_index, stream=True)
             total_length = response.headers.get('content-length')
@@ -413,6 +447,8 @@ class Client:
 
         url_config = self._get_presigned_url('get', self.config_file, bucket_model=True)
         config_file = os.path.join(path_to_origin, self.config_file.split('/')[-1])
+
+
         with open(config_file, 'wb') as handler:
             print("Downloading %s" % self.config_file)
             response = requests.get(url_config, stream=True)
@@ -433,6 +469,7 @@ class Client:
 
         url_data = self._get_presigned_url('get', self.checkpoint_data, bucket_model=True)
         checkpoint_file = os.path.join(path_to_origin, self.checkpoint_data.split('/')[-1])
+
         with open(checkpoint_file, 'wb') as handler:
             print("Downloading %s" % self.checkpoint_data)
             response = requests.get(url_data, stream=True)
@@ -477,6 +514,9 @@ class Client:
             print("Annotations pulled ...")
             self.dict_annotations = r.json()
 
+            if len(self.dict_annotations.keys()) == 0:
+                raise ResourceNotFoundError("You don't have any annotations")
+
         except:
             raise NetworkError(
                 "Server is not responding, please check your host or Picsell.ia server status on twitter")
@@ -502,8 +542,7 @@ class Client:
         if not hasattr(self, "auth"):
             raise ResourceNotFoundError("Please init client first")
 
-        to_send = {"project_token": self.project_token, "network_id": self.training_id}
-
+        to_send = {"project_token": self.project_token, "network_id": self.network_id}
         try:
             r = requests.get(self.host + 'get_saved_model_object_name', data=json.dumps(to_send), headers=self.auth)
         except:
@@ -527,7 +566,7 @@ class Client:
                 done = int(50 * dl / total_length)
                 sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
                 sys.stdout.flush()
-                print('Exported model downloaded @ %s' % path_to_save)
+            print('Exported model downloaded @ %s' % path_to_save)
 
     def dl_pictures(self):
         """Download your training set on the machine (Use it to dl images to Google Colab etc.)
@@ -552,9 +591,11 @@ class Client:
 
         dl = 0
         total_length = len(self.dict_annotations["images"])
-        for info, idx in zip(self.dict_annotations["images"], self.index_url):
+        for info in self.dict_annotations["images"]:
 
-            pic_name = os.path.join(self.png_dir, info['external_picture_url'])
+            pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('/')[-1])
+            if not os.path.isdir(self.png_dir):
+                os.makedirs(self.png_dir)
             if not os.path.isfile(pic_name):
                 try:
                     response = requests.get(info["signed_url"], stream=True)
@@ -568,8 +609,9 @@ class Client:
 
             dl += 1
             done = int(50 * dl / total_length)
-            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
             sys.stdout.flush()
+            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
+
 
 
         print("{} files were already on your machine".format(total_length - cnt))
@@ -852,8 +894,14 @@ class Client:
             ckpt_index_object = os.path.join(self.checkpoint_dir, ckpt_index)
             index_path = ckpt_index_object
 
-            ckpt_name = "model.ckpt-{}.data".format(str(ckpt_id))
-            ckpt_data = [e for e in file_list if ckpt_name in e][0]
+            ckpt_data = None
+            for e in file_list:
+                if "{}.data".format(ckpt_id) in e:
+                    ckpt_data = e
+
+            if ckpt_data is None:
+                raise ResourceNotFoundError("Could not fin matching data file with index")
+
             ckpt_data_object = os.path.join(self.checkpoint_dir, ckpt_data)
             self.OBJECT_NAME = ckpt_data_object
             data_path = ckpt_data_object
@@ -919,6 +967,7 @@ class Client:
         dataset_names = r.json()["dataset_names"]
         for e in dataset_names:
             print("\t", e)
+        return dataset_names
 
     def create_dataset(self, dataset_name):
         if not isinstance(dataset_name, str):
@@ -1062,7 +1111,7 @@ class Client:
 
     def _get_presigned_url(self, method, object_name, bucket_model=False):
 
-        to_send = {"object_name": object_name, "bucket_model": bucket_model, "project_token": self.project_token}
+        to_send = {"object_name": object_name, "bucket_model": bucket_model}
 
         if method == 'post':
             r = requests.get(self.host + 'get_post_url_preview', data=json.dumps(to_send), headers=self.auth)
@@ -1207,7 +1256,7 @@ class Client:
             print("Label_map.pbtxt crée @ {}".format(self.label_path))
 
         except:
-            raise ResourceNotFoundError("No directory found, please call init_model() function first")
+            raise ResourceNotFoundError("No directory found, please call checkout_network() or create_network() function first")
 
         self.label_map = labels_Network
 
@@ -1263,7 +1312,7 @@ class Client:
                                    If images can't be opened
 
         """
-
+        label_map = {v:int(k) for k,v in label_map.items()}
         if annotation_type not in ["polygon", "rectangle", "classification"]:
             raise InvalidQueryError("Please select a valid annotation_type")
 
@@ -1273,6 +1322,15 @@ class Client:
         else:
             path_list = self.eval_list
             id_list = self.eval_list_id
+
+        if annotation_type == "rectangle":
+            for ann in self.dict_annotations["annotations"]:
+                for an in ann["annotations"]:
+                    if "polygon" in an.keys():
+                        annotation_type = "rectangle from polygon"
+                        break
+
+        print(annotation_type)
 
         for path, ID in zip(path_list, id_list):
             xmins = []
@@ -1304,7 +1362,6 @@ class Client:
                                     poly = []
                                     for coord in geo:
                                         poly.append([[coord["x"], coord["y"]]])
-
                                     poly = np.array(poly, dtype=np.float32)
                                     mask = np.zeros((height, width), dtype=np.uint8)
                                     mask = Image.fromarray(mask)
@@ -1328,7 +1385,48 @@ class Client:
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                 encoded_jpg, image_format, classes_text, classes, masks)
 
-            if annotation_type=="rectangle":
+            if annotation_type == "rectangle from polygon":
+                print('il est la')
+                for image_annoted in self.dict_annotations["annotations"]:
+                    if internal_picture_id == image_annoted["internal_picture_id"]:
+                        for a in image_annoted["annotations"]:
+                            # try:
+                            if "polygon" in a.keys():
+                                geo = a["polygon"]["geometry"]
+                                poly = []
+                                for coord in geo:
+                                    poly.append([[coord["x"], coord["y"]]])
+
+                                poly = np.array(poly, dtype=np.float32)
+
+
+                                x, y, w, h = cv2.boundingRect(poly)
+                                xmins.append(x / width)
+                                xmaxs.append((x + w) / width)
+                                ymins.append(y / height)
+                                ymaxs.append((y + h) / height)
+                                classes_text.append(a["label"].encode("utf8"))
+                                label_id = label_map[a["label"]]
+                                classes.append(label_id)
+                            elif 'rectangle' in a.keys():
+                                xmin = a["rectangle"]["top"]
+                                xmax = xmin + a["rectangle"]["width"]
+                                ymin = a["rectangle"]["left"]
+                                ymax = ymin + a["rectangle"]["height"]
+                                xmins.append(xmin/width)
+                                xmaxs.append(xmax/width)
+                                ymins.append(ymin/height)
+                                ymaxs.append(ymax/height)
+                                classes_text.append(a["label"].encode("utf8"))
+                                label_id = label_map[a["label"]]
+                                classes.append(label_id)
+
+                            # except:
+                            #     pass
+                yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
+                encoded_jpg, image_format, classes_text, classes)
+
+            elif annotation_type=="rectangle":
                 for image_annoted in self.dict_annotations["annotations"]:
                     if internal_picture_id == image_annoted["internal_picture_id"]:
                         for a in image_annoted["annotations"]:
@@ -1365,9 +1463,10 @@ class Client:
 
 if __name__ == '__main__':
     print("Trying to create a new model ")
-    client = Client(api_token="03a0df321ccf19fad8eff1439e2bd996c6363d47", host="https://backstage.picsellia.com/sdk/")
-    client.checkout_project(project_token="808a7f70-8eaa-45ee-b788-158a23581965")
-    client.upload_and_create()
+    client = Client(api_token="57c60ade109be36ef1a1c89f56247109fa448741")
+    client.checkout_project(project_token="4b003477-3b31-4f74-8952-8a9dc879b0ec")
+    client.dl_annotations()
+    client.dl_pictures()
     #client.checkout_network('test_up')
     #client.dl_annotations()
     #client.dl_pictures(prop=0.5)
