@@ -9,6 +9,12 @@ from PIL import Image
 from picsellia.exceptions import *
 import numpy as np
 import cv2
+import sys
+if sys.version_info >= (3, 6):
+    import zipfile
+else:
+    import zipfile36 as zipfile
+
 class Client:
     """
     The Picsell.ia Client contains info necessary for connecting to the Picsell.ia Platform.
@@ -330,6 +336,7 @@ class Client:
         if not os.path.isdir(self.results_dir):
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
+            
         if not os.path.isdir(self.exported_model_dir):
             print("Creating directory for results of project {}".format(self.exported_model_dir))
             os.mkdir(self.exported_model_dir)
@@ -831,20 +838,53 @@ class Client:
                 self, "project_token"):
             raise ResourceNotFoundError("Please initialize model with init_model()")
 
-        if file_path != None:
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError("File not found")
+        if file_path is not None:
+            if not os.path.isdir(file_path):
+                raise FileNotFoundError("You have not exported your model")
 
-            if not file_path.endswith('.pb'):
+            ok = False
+            for fp in os.listdir(file_path):
+                if fp.endswith('.pb'):
+                    ok=True
+                    break
+            if not ok:
                 raise InvalidQueryError("wrong file type, please send a .pb file")
 
-            file_name = file_path.split('/')[-1]
-            self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id), file_name)
+            file_path = self._zipdir(file_path)
+            self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id), file_path.split('/')[-1])
+
+
         else:
-            file_path = os.path.join(self.exported_model_dir, 'saved_model/saved_model.pb')
-            if not file_path.endswith('.pb'):
-                raise InvalidQueryError("wrong file type, please send a .pb file")
-            self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.pb')
+
+            if os.path.isdir(os.path.join(self.exported_model_dir, 'saved_model')):
+                file_path = os.path.join(self.exported_model_dir, 'saved_model')
+                ok = False
+                for fp in os.listdir(file_path):
+                    if fp.endswith('.pb'):
+                        ok=True
+                        break
+                if not ok:
+                    raise InvalidQueryError("wrong file type, please send a .pb file")
+
+
+                self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.zip')
+                file_path = self._zipdir(file_path)
+            else:
+                file_path = self.exported_model_dir
+                ok = False
+                liste = os.listdir(file_path)
+
+                if "variables" in liste and "saved_model.pb" in liste:
+                    ok = True
+
+                if not ok:
+                    raise InvalidQueryError("wrong file type, please send a .pb file")
+
+
+                self.OBJECT_NAME = os.path.join(self.network_id, str(self.training_id),'saved_model.zip')
+                file_path = self._zipdir(file_path)
+
+
         self._init_multipart()
         parts = self._upload_part(file_path)
 
@@ -1292,6 +1332,19 @@ class Client:
         if r.status_code != 201:
             print(r.text)
             raise ValueError("Could not upload label to server")
+
+    def _zipdir(sef, path):
+        zipf = zipfile.ZipFile(path.split('.')[0]+'.zip', 'w', zipfile.ZIP_DEFLATED)
+        for filepath in os.listdir(path):
+            zipf.write(os.path.join(path, filepath), filepath)
+
+            if os.path.isdir(os.path.join(path,filepath)):
+                for fffpath in os.listdir(os.path.join(path,filepath)):
+                    zipf.write(os.path.join(path, filepath, fffpath), os.path.join(filepath,fffpath))
+
+        zipf.close()
+        return path.split('.')[0]+'.zip'
+
 
     def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
