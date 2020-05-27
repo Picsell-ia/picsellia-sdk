@@ -373,7 +373,7 @@ class Client:
         if not os.path.isdir(self.results_dir):
             print("Creating directory for results of project {}".format(self.results_dir))
             os.mkdir(self.results_dir)
-            
+
         if not os.path.isdir(self.exported_model_dir):
             print("Creating directory for results of project {}".format(self.exported_model_dir))
             os.mkdir(self.exported_model_dir)
@@ -1178,7 +1178,7 @@ class Client:
 
         try:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code != 201:
+            if r.status_code ==400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
             print("Your annotations has been uploaded, you can now see them in the platform")
         except:
