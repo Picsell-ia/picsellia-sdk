@@ -27,7 +27,7 @@ class Client:
 
     """
 
-    def __init__(self, api_token=None, host="https://backstage.picsellia.com/sdk/"):
+    def __init__(self, api_token=None, host="https://app.picsellia.com/sdk/"):
         """ Creates and initializes a Picsell.ia Client.
         Args:
             project_token (str): project_token key, given on the platform.
