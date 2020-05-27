@@ -1293,7 +1293,7 @@ class Client:
                     else:
                         labels_Network[str(k + 1)] = name
                 labelmap_file.close()
-            print("Label_map.pbtxt crée @ {}".format(self.label_path))
+            print("Label_map.pbtxt created @ {}".format(self.label_path))
 
         except:
             raise ResourceNotFoundError("No directory found, please call checkout_network() or create_network() function first")
