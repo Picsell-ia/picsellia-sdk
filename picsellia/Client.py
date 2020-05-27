@@ -1149,7 +1149,7 @@ class Client:
     def upload_annotations(self, annotations, dataset_name, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
-        Please find in our Documentation the annotations format acceoted to upload
+        Please find in our Documentation the annotations format accepted to upload
 
         Args :
             annotation (dict)
@@ -1383,7 +1383,7 @@ class Client:
         return path.split('.')[0]+'.zip'
 
 
-    def tf_vars_generator(self, label_map, ensemble='train', annotation_type="polygon"):
+    def tf_vars_generator(self, label_map=None, ensemble='train', annotation_type="polygon"):
         """ /!\ THIS FUNCTION IS MAINTAINED FOR TENSORFLOW 1.X /!\
 
         Generator for variable needed to instantiate a tf example needed for training.
@@ -1402,9 +1402,14 @@ class Client:
                                    If images can't be opened
 
         """
-        label_map = {v:int(k) for k,v in label_map.items()}
         if annotation_type not in ["polygon", "rectangle", "classification"]:
             raise InvalidQueryError("Please select a valid annotation_type")
+        
+        if label_map==None and annotation_type != "classification":
+            raise ValueError("Please provide a label_map dict loaded from a protobuf file when working with object detection")
+
+        if annotation_type == "classification":
+            label_map = {v:int(k) for k,v in self.label_map.items()}
 
         if ensemble == "train":
             path_list = self.train_list
