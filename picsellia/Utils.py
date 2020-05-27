@@ -1,5 +1,4 @@
 import cv2
-import cvxpy
 import io
 import json
 import numpy as np
@@ -60,55 +59,6 @@ def display_project_state(project_name, project_type, project_infos=None, networ
         print(
             "You don't have any Network attache to this project yet.\nIf you want to continue without an attached model, please initialise it with init_model(YOUR NAME)")
 
-
-def train_valid_split_obj_detection(dict_annotations=None, prop=0.8):
-    """Perform Optimized train test split for Object Detection.
-       Uses optimization to find the optimal split to have the desired repartition of instances by set.
-
-    Args:
-        prop (float) : Percentage of Instances used for training.
-
-    Raises:
-        ResourceNotFoundError: If not annotations in the Picsell.ia Client yet.
-    """
-    if dict_annotations is None:
-        raise ResourceNotFoundError("No dict_annotations passed")
-
-    final_mat = []
-    cate = [v["name"] for v in dict_annotations["categories"]]
-    for img in dict_annotations['images']:
-        cnt = [0] * len(cate)
-        internal_picture_id = img["internal_picture_id"]
-        for ann in dict_annotations["annotations"]:
-            if internal_picture_id == ann["internal_picture_id"]:
-                for an in ann['annotations']:
-                    idx = cate.index(an['label'])
-                    cnt[int(idx)] += 1
-        final_mat.append(cnt)
-
-    L = np.array(final_mat).T
-    train_total = np.array([sum(e) for e in L])
-    nc, n = L.shape
-    train_mins = prop * train_total
-    train_mins = train_mins.astype('int')
-
-    valid_mins = (1 - prop) * train_total
-    valid_mins = valid_mins.astype('int')
-
-    x = cvxpy.Variable(n, boolean=True)
-    lr = cvxpy.Variable(nc, nonneg=True)
-    ur = cvxpy.Variable(nc, nonneg=True)
-
-    lb = (L @ x >= train_mins.T - lr)
-    ub = (L @ x <= (sum(L.T) - valid_mins).T + ur)
-    constraints = [lb, ub]
-
-    objective = (sum(lr) + sum(ur)) ** 2
-    problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
-    problem.solve()
-    result = x.value
-
-    return [int(round(i)) for i in result]
 
 
 def train_valid_split_obj_simple(dict_annotations, prop=0.8):

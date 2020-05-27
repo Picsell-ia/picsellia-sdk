@@ -3,7 +3,6 @@ import os
 import sys
 import io
 import picsellia.Utils as utils
-import easygui
 import requests
 from PIL import Image
 from picsellia.exceptions import *
@@ -235,6 +234,44 @@ class Client:
         self.model_selected = self.dl_checkpoints()
         print("You already have some checkpoints on your machine, we'll start training from there.")
         return self.model_selected
+
+    def configure_network(self, project_type=None):
+
+        if project_type is None:
+            raise InvalidQueryError("project type not provided")
+
+        supported_type = ["classification", "detection", "segmentation"]
+        if project_type not in supported_type:
+            ok = False
+            while not ok:
+                a = input("Please provide a supported project type : {}".format(supported_type))
+                if a in supported_type:
+                    if a == "classification" and self.project_type != "classification":
+                        print("You tried to configure you project with an incompatible project type, you project type is {}".format(self.project_type))
+                    else:
+                        ok = True
+
+            to_send = {"network_id": self.network_id, "type": a}
+
+        else:
+            to_send = {"network_id": self.network_id, "type": project_type}
+
+        try:
+            r = requests.post(self.host + 'configure_network', data=json.dumps(to_send), headers=self.auth)
+        except:
+            raise NetworkError(
+                "Server is not responding, please check your host or Picsell.ia server status on twitter")
+
+        if not r.status_code == 200:
+            raise ResourceNotFoundError("Invalid network to configure")
+
+        if project_type == "classification":
+            self.annotation_type = "label"
+        elif project_type == "detection":
+            self.annotation_type = "rectangle"
+        elif project_type == "segmentation":
+            self.annotation_type = "polygon"
+
 
 
     def reset_network(self, network_name):
@@ -1109,7 +1146,7 @@ class Client:
             except:
                 raise NetworkError("Could not upload to Picsell.ia Backend")
 
-    def upload_annotations(self, annotations, dataset_name, project_token, format='picsellia'):
+    def upload_annotations(self, annotations, dataset_name, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
         Please find in our Documentation the annotations format acceoted to upload
