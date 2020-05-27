@@ -26,7 +26,7 @@ class Client:
 
     """
 
-    def __init__(self, api_token=None, host="https://backstage.picsellia.com/sdk/"):
+    def __init__(self, api_token=None, host="https://app.picsellia.com/sdk/"):
         """ Creates and initializes a Picsell.ia Client.
         Args:
             project_token (str): project_token key, given on the platform.
@@ -1330,7 +1330,7 @@ class Client:
                     else:
                         labels_Network[str(k + 1)] = name
                 labelmap_file.close()
-            print("Label_map.pbtxt crée @ {}".format(self.label_path))
+            print("Label_map.pbtxt created @ {}".format(self.label_path))
 
         except:
             raise ResourceNotFoundError("No directory found, please call checkout_network() or create_network() function first")
