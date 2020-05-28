@@ -1494,7 +1494,6 @@ class Client:
 
                                 poly = np.array(poly, dtype=np.float32)
 
-
                                 x, y, w, h = cv2.boundingRect(poly)
                                 xmins.append(x / width)
                                 xmaxs.append((x + w) / width)
@@ -1505,13 +1504,15 @@ class Client:
                                 classes.append(label_id)
                             elif 'rectangle' in a.keys():
                                 xmin = a["rectangle"]["top"]
-                                xmax = xmin + a["rectangle"]["width"]
+                                xmax = xmin + a["rectangle"]["height"]
                                 ymin = a["rectangle"]["left"]
-                                ymax = ymin + a["rectangle"]["height"]
-                                xmins.append(xmin/width)
-                                xmaxs.append(xmax/width)
-                                ymins.append(ymin/height)
-                                ymaxs.append(ymax/height)
+                                ymax = ymin + a["rectangle"]["width"]
+
+                                xmins.append(xmin/height)
+                                xmaxs.append(xmax/height)
+                                ymins.append(ymin/width)
+                                ymaxs.append(ymax/width)
+
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
@@ -1528,13 +1529,14 @@ class Client:
                             try:
                                 if 'rectangle' in a.keys():
                                     xmin = a["rectangle"]["top"]
-                                    xmax = xmin + a["rectangle"]["width"]
+                                    xmax = xmin + a["rectangle"]["height"]
                                     ymin = a["rectangle"]["left"]
-                                    ymax = ymin + a["rectangle"]["height"]
-                                    xmins.append(xmin/width)
-                                    xmaxs.append(xmax/width)
-                                    ymins.append(ymin/height)
-                                    ymaxs.append(ymax/height)
+                                    ymax = ymin + a["rectangle"]["width"]
+
+                                    xmins.append(xmin/height)
+                                    xmaxs.append(xmax/height)
+                                    ymins.append(ymin/width)
+                                    ymaxs.append(ymax/width)
                                     classes_text.append(a["label"].encode("utf8"))
                                     label_id = label_map[a["label"]]
                                     classes.append(label_id)
