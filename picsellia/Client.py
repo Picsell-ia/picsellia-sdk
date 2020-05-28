@@ -1508,10 +1508,10 @@ class Client:
                                 ymin = a["rectangle"]["left"]
                                 ymax = ymin + a["rectangle"]["width"]
 
-                                xmins.append(xmin/height)
-                                xmaxs.append(xmax/height)
-                                ymins.append(ymin/width)
-                                ymaxs.append(ymax/width)
+                                ymins.append(xmin/height)
+                                ymaxs.append(xmax/height)
+                                xmins.append(ymin/width)
+                                xmaxs.append(ymax/width)
 
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
