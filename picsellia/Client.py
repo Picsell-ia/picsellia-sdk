@@ -1503,15 +1503,23 @@ class Client:
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
                             elif 'rectangle' in a.keys():
-                                xmin = a["rectangle"]["top"]
-                                xmax = xmin + a["rectangle"]["height"]
-                                ymin = a["rectangle"]["left"]
-                                ymax = ymin + a["rectangle"]["width"]
+                                xmin = a["rectangle"]["left"]
+                                ymin = a["rectangle"]["top"]
+                                w = a["rectangle"]["width"]
+                                h = a["rectangle"]["height"]
+                                
+                                xmax = xmin + w
+                                ymax = ymin + h
 
-                                ymins.append(xmin/height)
-                                ymaxs.append(xmax/height)
-                                xmins.append(ymin/width)
-                                xmaxs.append(ymax/width)
+                                # ymin = a["rectangle"]["top"]
+                                # xmax = xmin + a["rectangle"]["height"]
+                                # ymin = a["rectangle"]["left"]
+                                # ymax = ymin + a["rectangle"]["width"]
+
+                                ymins.append(ymin/height)
+                                ymaxs.append(ymax/height)
+                                xmins.append(xmin/width)
+                                xmaxs.append(xmax/width)
 
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
@@ -1528,15 +1536,23 @@ class Client:
                         for a in image_annoted["annotations"]:
                             try:
                                 if 'rectangle' in a.keys():
-                                    xmin = a["rectangle"]["top"]
-                                    xmax = xmin + a["rectangle"]["height"]
-                                    ymin = a["rectangle"]["left"]
-                                    ymax = ymin + a["rectangle"]["width"]
+                                    xmin = a["rectangle"]["left"]
+                                    ymin = a["rectangle"]["top"]
+                                    w = a["rectangle"]["width"]
+                                    h = a["rectangle"]["height"]
+                                    
+                                    xmax = xmin + w
+                                    ymax = ymin + h
 
-                                    ymins.append(xmin/height)
-                                    ymaxs.append(xmax/height)
-                                    xmins.append(ymin/width)
-                                    xmaxs.append(ymax/width)
+                                    # ymin = a["rectangle"]["top"]
+                                    # xmax = xmin + a["rectangle"]["height"]
+                                    # ymin = a["rectangle"]["left"]
+                                    # ymax = ymin + a["rectangle"]["width"]
+
+                                    ymins.append(ymin/height)
+                                    ymaxs.append(ymax/height)
+                                    xmins.append(xmin/width)
+                                    xmaxs.append(xmax/width)
                                     classes_text.append(a["label"].encode("utf8"))
                                     label_id = label_map[a["label"]]
                                     classes.append(label_id)
