@@ -704,7 +704,7 @@ class Client:
             r = requests.post(self.host + 'post_repartition', data=json.dumps(to_send), headers=self.auth)
             if r.status_code != 201:
                 raise NetworkError('Can not send repartition to Picsell.ia Backend')
-            print("Repartition send ..")
+            print("Repartition sent ..")
 
         except:
             raise NetworkError('Can not send repartition to Picsell.ia Backend')
@@ -1146,7 +1146,7 @@ class Client:
             except:
                 raise NetworkError("Could not upload to Picsell.ia Backend")
 
-    def upload_annotations(self, annotations, dataset_name, format='picsellia'):
+    def upload_annotations(self, annotations, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
         Please find in our Documentation the annotations format accepted to upload
@@ -1169,21 +1169,52 @@ class Client:
                 raise ValueError('dict of annotations in images must be a dict_annotations not {}'
                                  .format(type(annotations)))
 
+
+        total_img = len(annotations["images"])
+        steps = total_img//300
+
+        for i in range(steps-1):
+
+            chunk_annotations = {
+                "images": annotations["images"],
+                "annotations": annotations["annotations"][i * 300:(i + 1) * 300],
+                "categories": annotations["categories"]
+            }
+
+            to_send = {
+                'format': format,
+                'annotations': chunk_annotations,
+                'project_token': self.project_token
+            }
+
+
+            try:
+                r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
+                if r.status_code == 400:
+                    raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
+                print("Your annotations has been uploaded, you can now see them in the platform")
+            except:
+                raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
+
+        chunk_annotations = {
+            "images": annotations["images"][i * 300:],
+            "annotations": annotations["annotations"][i * 300:],
+            "categories": annotations["categories"][i * 300:],
+        }
+
         to_send = {
             'format': format,
-            'annotations': annotations,
-            'dataset_name': dataset_name,
+            'annotations': chunk_annotations,
             'project_token': self.project_token
         }
 
         try:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code ==400:
+            if r.status_code == 400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
             print("Your annotations has been uploaded, you can now see them in the platform")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
-
 
 
     def _get_presigned_url(self, method, object_name, bucket_model=False):
@@ -1406,7 +1437,7 @@ class Client:
         """
         if annotation_type not in ["polygon", "rectangle", "classification"]:
             raise InvalidQueryError("Please select a valid annotation_type")
-        
+
         if label_map==None and annotation_type != "classification":
             raise ValueError("Please provide a label_map dict loaded from a protobuf file when working with object detection")
 
