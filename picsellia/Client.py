@@ -789,7 +789,7 @@ class Client:
         """Send Visual results to Picsell.ia Platform
 
         Args:
-            id (str): Id of the training
+            id (int): Id of the training
         Raises:
             NetworkError: If it impossible to initialize upload
             FileNotFoundError:
@@ -1349,16 +1349,18 @@ class Client:
                 raise FileNotFoundError("label map @ %s doesn't exists" % label_path)
             with open(label_path, 'r') as f:
                 label_map = json.load(f)
-            label = {}
-            for k,v in label_map.items():
-                if len(k) < 3 and not all(map(str.isdigit, k)):
-                    label[v] = k
+            # label = {}
+            # for k,v in label_map.items():
+            #     if len(k) < 3 and not all(map(str.isdigit, k)):
+            #         label[v] = k
+            #     else:
+            #         label[]
 
         if not hasattr(self, "label_map") and label_path is None:
             raise ValueError("Please Generate label map first")
 
         if label_path is not None:
-            to_send = {"project_token": self.project_token, "labels": label, "network_id": self.network_id}
+            to_send = {"project_token": self.project_token, "labels": label_map, "network_id": self.network_id}
         else:
             to_send = {"project_token": self.project_token, "labels": self.label_map, "network_id": self.network_id}
 
