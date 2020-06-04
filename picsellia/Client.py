@@ -626,10 +626,10 @@ class Client:
         """
 
         if not hasattr(self, "dict_annotations"):
-            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
+            raise ResourceNotFoundError("Please dl_annotations model with dl_annotations()")
 
         if not "images" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
+            raise ResourceNotFoundError("Please run dl_annotations function first")
 
         cnt = 0
 
@@ -671,10 +671,10 @@ class Client:
     def train_test_split(self, prop=0.8):
 
         if not hasattr(self, "dict_annotations"):
-            raise ResourceNotFoundError("Please dl_annotation model with dl_annotation()")
+            raise ResourceNotFoundError("Please dl_annotations model with dl_annotations()")
 
         if not "images" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation function first")
+            raise ResourceNotFoundError("Please run dl_annotations function first")
 
         self.train_list = []
         self.eval_list = []
@@ -1174,7 +1174,7 @@ class Client:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
             if r.status_code == 400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            print("300 annotations uploaded")
+            print(f"{len(chunk_annotations)} annotations uploaded")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
@@ -1200,11 +1200,9 @@ class Client:
             if not isinstance(annotations, dict):
                 raise ValueError('dict of annotations in images must be a dict_annotations not {}'
                                  .format(type(annotations)))
-            total_img = len(annotations["annotations"])
-            #steps = total_img // 300
-            print("Chunking your annotations ...")
-            print("Upload starting ..")
 
+
+            print("Chunking your annotations ...")
             all_chunk = []
 
             for im in annotations["images"]:
@@ -1217,7 +1215,7 @@ class Client:
                     "annotations": chunk_tmp,
                     "categories": annotations["categories"]
                 })
-
+            print("Upload starting ..")
             pool = ThreadPool(processes=8)
             pool.map(self._send_chunk_custom, all_chunk)
 
@@ -1347,12 +1345,12 @@ class Client:
         """
         print("Generating labelmap ...")
         if not hasattr(self, "dict_annotations") or not hasattr(self, "base_dir"):
-            raise ResourceNotFoundError("Please client.init model() and client.dl_annotation()")
+            raise ResourceNotFoundError("Please client.init model() and client.dl_annotations()")
 
         self.label_path = os.path.join(self.base_dir, "label_map.pbtxt")
 
         if not "categories" in self.dict_annotations.keys():
-            raise ResourceNotFoundError("Please run dl_annotation() first")
+            raise ResourceNotFoundError("Please run dl_annotations() first")
 
         categories = self.dict_annotations["categories"]
         labels_Network = {}
