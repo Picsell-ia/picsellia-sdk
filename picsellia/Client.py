@@ -9,6 +9,8 @@ from picsellia.exceptions import *
 import numpy as np
 import cv2
 import sys
+from multiprocessing.pool import ThreadPool
+
 if sys.version_info >= (3, 6):
     import zipfile
 else:
@@ -1146,6 +1148,36 @@ class Client:
             except:
                 raise NetworkError("Could not upload to Picsell.ia Backend")
 
+    def _send_chunk_custom(self, chunk_annotations):
+        to_send = {
+            'format': 'custom',
+            'annotations': chunk_annotations,
+            'project_token': self.project_token
+        }
+
+        try:
+            r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code == 400:
+                raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
+            print("300 annotations uploaded")
+        except:
+            raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
+
+    def _send_chunk_picsell(self, chunk_annotations):
+        to_send = {
+            'format': 'picsellia',
+            'annotations': chunk_annotations,
+            'project_token': self.project_token
+        }
+
+        try:
+            r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
+            if r.status_code == 400:
+                raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
+            print("300 annotations uploaded")
+        except:
+            raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
+
     def upload_annotations(self, annotations, format='picsellia'):
         """ Upload annotation to Picsell.ia Backend
 
@@ -1168,53 +1200,26 @@ class Client:
             if not isinstance(annotations, dict):
                 raise ValueError('dict of annotations in images must be a dict_annotations not {}'
                                  .format(type(annotations)))
+            total_img = len(annotations["annotations"])
+            #steps = total_img // 300
+            print("Chunking your annotations ...")
+            print("Upload starting ..")
 
+            all_chunk = []
 
-        total_img = len(annotations["images"])
-        steps = total_img//300
+            for im in annotations["images"]:
+                chunk_tmp = []
+                for ann in annotations["annotations"]:
+                    if ann["image_id"] == im["id"]:
+                        chunk_tmp.append(ann)
+                all_chunk.append({
+                    "images": [im],
+                    "annotations": chunk_tmp,
+                    "categories": annotations["categories"]
+                })
 
-        for i in range(steps-1):
-
-            chunk_annotations = {
-                "images": annotations["images"],
-                "annotations": annotations["annotations"][i * 300:(i + 1) * 300],
-                "categories": annotations["categories"]
-            }
-
-            to_send = {
-                'format': format,
-                'annotations': chunk_annotations,
-                'project_token': self.project_token
-            }
-
-
-            try:
-                r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
-                if r.status_code == 400:
-                    raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-                print("Your annotations has been uploaded, you can now see them in the platform")
-            except:
-                raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
-
-        chunk_annotations = {
-            "images": annotations["images"][i * 300:],
-            "annotations": annotations["annotations"][i * 300:],
-            "categories": annotations["categories"][i * 300:],
-        }
-
-        to_send = {
-            'format': format,
-            'annotations': chunk_annotations,
-            'project_token': self.project_token
-        }
-
-        try:
-            r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
-            if r.status_code == 400:
-                raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            print("Your annotations have been uploaded, you can now see them in the platform")
-        except:
-            raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
+            pool = ThreadPool(processes=8)
+            pool.map(self._send_chunk_custom, all_chunk)
 
 
     def _get_presigned_url(self, method, object_name, bucket_model=False):
@@ -1514,7 +1519,6 @@ class Client:
                 encoded_jpg, image_format, classes_text, classes, masks)
 
             if annotation_type == "rectangle from polygon":
-                print('il est la')
                 for image_annoted in self.dict_annotations["annotations"]:
                     if internal_picture_id == image_annoted["internal_picture_id"]:
                         for a in image_annoted["annotations"]:

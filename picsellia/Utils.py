@@ -8,7 +8,6 @@ import time
 from PIL import Image, ImageDraw
 from picsellia.exceptions import *
 import sys
-import easygui
 import random
 import logging
 
