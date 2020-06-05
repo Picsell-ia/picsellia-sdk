@@ -1152,14 +1152,15 @@ class Client:
         to_send = {
             'format': 'custom',
             'annotations': chunk_annotations,
-            'project_token': self.project_token
+            'project_token': self.project_token,
+            "project_type": self.project_type
         }
 
         try:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
             if r.status_code == 400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            print("300 annotations uploaded")
+            print(f"{len(chunk_annotations)} annotations uploaded")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
@@ -1167,7 +1168,8 @@ class Client:
         to_send = {
             'format': 'picsellia',
             'annotations': chunk_annotations,
-            'project_token': self.project_token
+            'project_token': self.project_token,
+            "project_type": self.project_type
         }
 
         try:
@@ -1345,7 +1347,7 @@ class Client:
         """
         print("Generating labelmap ...")
         if not hasattr(self, "dict_annotations") or not hasattr(self, "base_dir"):
-            raise ResourceNotFoundError("Please client.init model() and client.dl_annotations()")
+            raise ResourceNotFoundError("Please run create_network() or checkout_network() then dl_annotations()")
 
         self.label_path = os.path.join(self.base_dir, "label_map.pbtxt")
 
@@ -1461,7 +1463,7 @@ class Client:
                         annotation_type = "rectangle from polygon"
                         break
 
-        print(annotation_type)
+        print(f"annotation type used for the variable generator: {annotation_type})
 
         for path, ID in zip(path_list, id_list):
             xmins = []
