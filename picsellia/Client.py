@@ -1160,7 +1160,7 @@ class Client:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
             if r.status_code == 400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            print(f"{len(chunk_annotations["annotations"])} annotations uploaded")
+            print(f"{len(chunk_annotations['annotations'])} annotations uploaded")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
@@ -1176,7 +1176,7 @@ class Client:
             r = requests.post(self.host + 'upload_annotations', data=json.dumps(to_send), headers=self.auth)
             if r.status_code == 400:
                 raise NetworkError("Impossible to upload annotations to Picsell.ia backend because \n%s" % (r.text))
-            print(f"{len(chunk_annotations["annotations"])} annotations uploaded")
+            print(f"{len(chunk_annotations['annotations'])} annotations uploaded")
         except:
             raise NetworkError("Impossible to upload annotations to Picsell.ia backend")
 
