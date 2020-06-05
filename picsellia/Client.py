@@ -1463,7 +1463,7 @@ class Client:
                         annotation_type = "rectangle from polygon"
                         break
 
-        print(f"annotation type used for the variable generator: {annotation_type})
+        print(f"annotation type used for the variable generator: {annotation_type}")
 
         for path, ID in zip(path_list, id_list):
             xmins = []
