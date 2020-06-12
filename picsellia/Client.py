@@ -1505,10 +1505,15 @@ class Client:
                                     masks.append(maskByteArr)
 
                                     x, y, w, h = cv2.boundingRect(poly)
-                                    xmins.append(x / width)
-                                    xmaxs.append((x + w) / width)
-                                    ymins.append(y / height)
-                                    ymaxs.append((y + h) / height)
+                                    x1_norm = np.clip(x/width, 0, 1) 
+                                    x2_norm = np.clip((x+w)/width, 0, 1) 
+                                    y1_norm = np.clip(y/height, 0, 1) 
+                                    y2_norm = np.clip((y+h)/height, 0, 1) 
+
+                                    xmins.append(x1_norm)
+                                    xmaxs.append(x2_norm)
+                                    ymins.append(y1_norm)
+                                    ymaxs.append(y2_norm)
                                     classes_text.append(a["label"].encode("utf8"))
                                     label_id = label_map[a["label"]]
                                     classes.append(label_id)
@@ -1531,11 +1536,16 @@ class Client:
 
                                 poly = np.array(poly, dtype=np.float32)
 
-                                x, y, w, h = cv2.boundingRect(poly)
-                                xmins.append(x / width)
-                                xmaxs.append((x + w) / width)
-                                ymins.append(y / height)
-                                ymaxs.append((y + h) / height)
+                                    x, y, w, h = cv2.boundingRect(poly)
+                                    x1_norm = np.clip(x/width, 0, 1) 
+                                    x2_norm = np.clip((x+w)/width, 0, 1) 
+                                    y1_norm = np.clip(y/height, 0, 1) 
+                                    y2_norm = np.clip((y+h)/height, 0, 1) 
+
+                                    xmins.append(x1_norm)
+                                    xmaxs.append(x2_norm)
+                                    ymins.append(y1_norm)
+                                    ymaxs.append(y2_norm)
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
@@ -1552,11 +1562,11 @@ class Client:
                                 # xmax = xmin + a["rectangle"]["height"]
                                 # ymin = a["rectangle"]["left"]
                                 # ymax = ymin + a["rectangle"]["width"]
-
-                                ymins.append(ymin/height)
-                                ymaxs.append(ymax/height)
-                                xmins.append(xmin/width)
-                                xmaxs.append(xmax/width)
+                                
+                                ymins.append(np.clip(ymin/height, 0, 1))
+                                ymaxs.append(np.clip(ymax/height, 0, 1))
+                                xmins.append(np.clip(xmin/width, 0, 1))
+                                xmaxs.append(np.clip(xmax/width, 0, 1))
 
                                 classes_text.append(a["label"].encode("utf8"))
                                 label_id = label_map[a["label"]]
@@ -1585,11 +1595,11 @@ class Client:
                                     # xmax = xmin + a["rectangle"]["height"]
                                     # ymin = a["rectangle"]["left"]
                                     # ymax = ymin + a["rectangle"]["width"]
-
-                                    ymins.append(ymin/height)
-                                    ymaxs.append(ymax/height)
-                                    xmins.append(xmin/width)
-                                    xmaxs.append(xmax/width)
+                                    
+                                    ymins.append(np.clip(ymin/height, 0, 1))
+                                    ymaxs.append(np.clip(ymax/height, 0, 1))
+                                    xmins.append(np.clip(xmin/width, 0, 1))
+                                    xmaxs.append(np.clip(xmax/width, 0, 1))
                                     classes_text.append(a["label"].encode("utf8"))
                                     label_id = label_map[a["label"]]
                                     classes.append(label_id)
