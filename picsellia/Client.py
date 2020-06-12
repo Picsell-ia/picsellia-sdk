@@ -4,7 +4,7 @@ import sys
 import io
 import picsellia.Utils as utils
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw
 from picsellia.exceptions import *
 import numpy as np
 import cv2
