@@ -1476,7 +1476,7 @@ class Client:
             masks = []
 
             internal_picture_id = ID
-            
+
             image = Image.open(path)
             for orientation in TAGS.keys():
                 if TAGS[orientation]=='Orientation':
@@ -1492,7 +1492,7 @@ class Client:
                 image=image.rotate(90, expand=True)
 
             encoded_jpg = io.BytesIO()
-            image.save(encoded_jpg, format="PNG")
+            image.save(encoded_jpg, format="JPEG")
             encoded_jpg = encoded_jpg.getvalue()
 
             width, height = image.size
@@ -1535,6 +1535,7 @@ class Client:
 
                             except:
                                 pass
+
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                 encoded_jpg, image_format, classes_text, classes, masks)
 
@@ -1568,16 +1569,9 @@ class Client:
                                 xmin = a["rectangle"]["left"]
                                 ymin = a["rectangle"]["top"]
                                 w = a["rectangle"]["width"]
-                                h = a["rectangle"]["height"]
-                                
+                                h = a["rectangle"]["height"]                           
                                 xmax = xmin + w
                                 ymax = ymin + h
-
-                                # ymin = a["rectangle"]["top"]
-                                # xmax = xmin + a["rectangle"]["height"]
-                                # ymin = a["rectangle"]["left"]
-                                # ymax = ymin + a["rectangle"]["width"]
-                                
                                 ymins.append(np.clip(ymin/height, 0, 1))
                                 ymaxs.append(np.clip(ymax/height, 0, 1))
                                 xmins.append(np.clip(xmin/width, 0, 1))
@@ -1587,8 +1581,7 @@ class Client:
                                 label_id = label_map[a["label"]]
                                 classes.append(label_id)
 
-                            # except:
-                            #     pass
+
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                 encoded_jpg, image_format, classes_text, classes)
 
@@ -1601,16 +1594,9 @@ class Client:
                                     xmin = a["rectangle"]["left"]
                                     ymin = a["rectangle"]["top"]
                                     w = a["rectangle"]["width"]
-                                    h = a["rectangle"]["height"]
-                                    
+                                    h = a["rectangle"]["height"]                                  
                                     xmax = xmin + w
                                     ymax = ymin + h
-
-                                    # ymin = a["rectangle"]["top"]
-                                    # xmax = xmin + a["rectangle"]["height"]
-                                    # ymin = a["rectangle"]["left"]
-                                    # ymax = ymin + a["rectangle"]["width"]
-
                                     ymins.append(np.clip(ymin/height, 0, 1))
                                     ymaxs.append(np.clip(ymax/height, 0, 1))
                                     xmins.append(np.clip(xmin/width, 0, 1))
@@ -1619,7 +1605,7 @@ class Client:
                                     label_id = label_map[a["label"]]
                                     classes.append(label_id)
                             except:
-                                pass
+                                print(f"An error occured with the image {path}")
 
                 yield (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                     encoded_jpg, image_format, classes_text, classes)
