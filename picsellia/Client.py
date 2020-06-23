@@ -5,6 +5,7 @@ import io
 import picsellia.Utils as utils
 import requests
 from PIL import Image, ImageDraw
+from PIL.ExifTags import TAGS
 from picsellia.exceptions import *
 import numpy as np
 import cv2
@@ -1475,11 +1476,25 @@ class Client:
             masks = []
 
             internal_picture_id = ID
+            
+            image = Image.open(path)
+            for orientation in TAGS.keys():
+                if TAGS[orientation]=='Orientation':
+                    break
 
-            with open(path, 'rb') as fid:
-                encoded_jpg = fid.read()
-            encoded_jpg_io = io.BytesIO(encoded_jpg)
-            image = Image.open(encoded_jpg_io)
+            exif=dict(image._getexif().items())
+
+            if exif[orientation] == 3:
+                image=image.rotate(180, expand=True)
+            elif exif[orientation] == 6:
+                image=image.rotate(270, expand=True)
+            elif exif[orientation] == 8:
+                image=image.rotate(90, expand=True)
+
+            encoded_jpg = io.BytesIO()
+            image.save(encoded_jpg, format="PNG")
+            encoded_jpg = encoded_jpg.getvalue()
+
             width, height = image.size
             filename = path.encode('utf8')
             image_format = '{}'.format(path.split('.')[-1])

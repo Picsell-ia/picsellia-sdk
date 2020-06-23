@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'picsellia',         # How you named your package folder (MyLib)
   packages = ['picsellia'],   # Chose the same as "name"
-  version = '3.06',      # Start with a small number and increase it with every change you make
+  version = '3.8',      # Start with a small number and increase it with every change you make
 
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Python SDK to make your code Picsell.ia compatible !',   # Give a short description about your library
@@ -10,7 +10,7 @@ setup(
   author_email = 'thibaut@picsellia.com',      # Type in your E-Mail
   url = 'https://www.picsellia.com',   # Provide either the link to your github or to your website
   download_url = 'https://github.com/Picsell-ia/picsellia-sdk/archive/v0.3.tar.gz',    # I explain this later on
-  keywords = ['SDK', 'Picsell.ia', 'Computer Vision', 'Deep Learing'],   # Keywords that define your package best
+  keywords = ['SDK', 'Picsell.ia', 'Computer Vision', 'Deep Learning'],   # Keywords that define your package best
   install_requires=[            # I get to this in a second
           'opencv-python',
           'requests',
