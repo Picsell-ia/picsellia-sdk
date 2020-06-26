@@ -4,8 +4,7 @@ import sys
 import io
 import picsellia.Utils as utils
 import requests
-from PIL import Image, ImageDraw
-from PIL.ExifTags import TAGS
+from PIL import Image, ImageDraw, ImageOps
 from picsellia.exceptions import *
 import numpy as np
 import cv2
@@ -1478,19 +1477,7 @@ class Client:
             internal_picture_id = ID
 
             image = Image.open(path)
-            for orientation in TAGS.keys():
-                if TAGS[orientation]=='Orientation':
-                    break
-
-            exif=dict(image._getexif().items())
-
-            if exif[orientation] == 3:
-                image=image.rotate(180, expand=True)
-            elif exif[orientation] == 6:
-                image=image.rotate(270, expand=True)
-            elif exif[orientation] == 8:
-                image=image.rotate(90, expand=True)
-
+            image = ImageOps.exif_transpose(image)
             encoded_jpg = io.BytesIO()
             image.save(encoded_jpg, format="JPEG")
             encoded_jpg = encoded_jpg.getvalue()
