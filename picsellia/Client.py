@@ -54,7 +54,7 @@ class Client:
             raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
-        self.supported_img_types = ("png", "jpg", "jpeg")
+        self.supported_img_types = ("png", "jpg", "jpeg", "JPG", "JPEG", "PNG")
         self.label_path = ""
         print(f"Welcome {bcolors.OKBLUE}{self.username}{bcolors.ENDC}, glad to have you back")
 
@@ -65,6 +65,8 @@ class Client:
                     png_dir (str): path to your images, if None you can download the pictures with dl_pictures()
                 Raises:
                     NetworkError: If Picsell.ia server not responding or host is incorrect.
+                    AuthenticationError: If token does not match the provided token on the platform.
+                    NotImplementedError: If there are files in the png_dir with unsupported types (png, jpeg, jpg)
         """
         to_send = {"project_token": project_token}
         try:
@@ -92,7 +94,7 @@ class Client:
             for filename in os.listdir(self.png_dir):
                 ext = filename.split('.')[-1]
                 if ext not in self.supported_img_types:
-                    raise exceptions.ResourceNotFoundError(f"Found a non supported filetype {filename.split('.')[-1]} in your png_dir, \
+                    raise NotImplementedError(f"Found a non supported filetype {filename.split('.')[-1]} in your png_dir, \
                                     supported filetype are : {self.supported_img_types}")
 
     def create_network(self, network_name, orphan=False):
@@ -153,7 +155,7 @@ class Client:
             self.results_dir = os.path.join(self.base_dir, 'results')
             self.exported_model_dir = os.path.join(self.base_dir, 'exported_model')
 
-        print("New Network have been created")
+        print("New network has been created")
 
     def checkout_network(self, network_name, training_id=None):
         """ Attach the Picsell.ia Client to the desired Network.
@@ -229,6 +231,8 @@ class Client:
         else:
             with open(os.path.join(self.project_name, self.network_name, "annotations.json"), "r") as f:
                 self.dict_annotations = json.load(f)
+        self.generate_labelmap()
+        self.send_labelmap()
         return self.model_selected
 
     def configure_network(self, project_type):
@@ -470,15 +474,14 @@ class Client:
             print()
         return path_to_origin
 
-    def dl_annotations(self, option="train"):
+    def dl_annotations(self, option=""):
         """ Download all the annotations made on Picsell.ia Platform for your project.
-
+            Called when checking out a network
             Args:
                 option (str): Define what type of annotation to export (accepted or all)
 
             Raises:
-                AuthenticationError: If `project_token` does not match the provided project_token on the platform.
-                NetworkError: If Picsell.ia server not responding or host is incorrect.
+                NetworkError: If Picsell.ia server is not responding or host is incorrect.
                 ResourceNotFoundError: If we can't find any annotations for that project.
             """
 
@@ -552,8 +555,7 @@ class Client:
            Perform train_test_split & send the repartition to Picsell.ia Platform
 
         Raises:
-            ResourceNotFoundError : If no annotations in the Picsell.ia Client yet or images can't be downloaded
-            ProcessingError: If the train test split can't be performed."""
+            ResourceNotFoundError : If no annotations in the Picsell.ia Client yet or images can't be downloaded"""
 
         if not hasattr(self, "dict_annotations"):
             raise exceptions.ResourceNotFoundError("Please dl_annotations model with dl_annotations()")
@@ -737,7 +739,7 @@ class Client:
         Args:
             _id (int): id of the training
         Raises:
-            NetworkError: if it impossible to initialize upload
+            NetworkError: If impossible to connect to Picsell.ia Backend
             FileNotFoundError:
             ResourceNotFoundError:
         """
