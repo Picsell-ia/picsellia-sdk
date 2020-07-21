@@ -10,6 +10,8 @@ import numpy as np
 import cv2
 import sys
 from multiprocessing.pool import ThreadPool
+from multiprocessing import Lock
+import time
 
 if sys.version_info >= (3, 6):
     import zipfile
@@ -631,43 +633,71 @@ class Client:
         if not "images" in self.dict_annotations.keys():
             raise ResourceNotFoundError("Please run dl_annotations function first")
 
-        cnt = 0
+        def pool_init():
+            global cnt
+            global dl 
+            global total_length 
+            global should_log
+            cnt = 0
+            dl = 0
+            total_length = len(self.dict_annotations["images"])
+            should_log = True
+
+
+        def _dl_list(infos):
+            global cnt
+            global dl 
+            global total_length 
+            global should_log
+
+            if should_log:
+                s_log = True
+                should_log = False
+            else:
+                s_log = False
+
+            for info in infos:
+                pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('/')[-1])
+                if not os.path.isfile(pic_name):
+                    try:
+                        response = requests.get(info["signed_url"], stream=True)
+                        with open(pic_name, 'wb') as handler:
+                            for data in response.iter_content(chunk_size=1024):
+                                handler.write(data)
+                        cnt+=1
+                    except:
+                        print("Image %s can't be downloaded" % pic_name)
+                else:
+                    print(f"\n {pic_name} not in if")
+                dl += 1
+                if s_log:        
+                    done = int(50 * dl / total_length)
+                    sys.stdout.flush()
+                    sys.stdout.write(f"\r[{'=' * done}{' ' * (50 - done)}] {dl}/{total_length}")
+
+            while dl<total_length and s_log:
+                    time.sleep(0.5)
+                    done = int(50 * dl / total_length)
+                    sys.stdout.flush()
+                    sys.stdout.write(f"\r[{'=' * done}{' ' * (50 - done)}] {dl}/{total_length}")
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
 
         print("Downloading PNG images to your machine ...")
 
-        dl = 0
-        total_length = len(self.dict_annotations["images"])
-        for info in self.dict_annotations["images"]:
+        if not os.path.isdir(self.png_dir):
+            os.makedirs(self.png_dir)
 
-            pic_name = os.path.join(self.png_dir, info['external_picture_url'].split('/')[-1])
-            if not os.path.isdir(self.png_dir):
-                os.makedirs(self.png_dir)
-            if not os.path.isfile(pic_name):
-                try:
-                    response = requests.get(info["signed_url"], stream=True)
-                    with open(pic_name, 'wb') as handler:
-                        for data in response.iter_content(chunk_size=1024):
-                            handler.write(data)
-                    cnt += 1
-                except:
-                    print("Image %s can't be downloaded" % pic_name)
-                    pass
-
-            dl += 1
-            done = int(50 * dl / total_length)
-            sys.stdout.flush()
-            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50 - done)))
-
-
-
-        print("{} files were already on your machine".format(total_length - cnt))
-        print(" {} PNG images have been downloaded to your machine".format(cnt))
-
-
-
-
-
-
+        t = time.time()
+        nb_threads = 12
+        infos_split = list(chunks(self.dict_annotations["images"], nb_threads))
+        p = ThreadPool(nb_threads, initializer=pool_init, initargs=())
+        p.map(_dl_list, infos_split)
+        print(f"\n{cnt} images have been downloaded")
+    
     def train_test_split(self, prop=0.8):
 
         if not hasattr(self, "dict_annotations"):
@@ -787,18 +817,18 @@ class Client:
         except:
             raise NetworkError("Could not connect to Picsell.ia Server")
 
-    def send_examples(self, id=None, example_path_list=None):
+    def send_results(self, _id=None, example_path_list=None):
         """Send Visual results to Picsell.ia Platform
 
         Args:
-            id (int): Id of the training
+            _id (int): Id of the training
         Raises:
             NetworkError: If it impossible to initialize upload
             FileNotFoundError:
             ResourceNotFoundError:
-
         """
-        if id is None and example_path_list is None:
+
+        if _id is None and example_path_list is None:
             try:
                 results_dir = self.results_dir
                 list_img = os.listdir(results_dir)
@@ -806,17 +836,16 @@ class Client:
             except:
                 raise ResourceNotFoundError("You didn't init_model(), please call this before sending examples")
 
-        elif id is not None and example_path_list is None:
+        elif _id is not None and example_path_list is None:
             base_dir = os.path.join(self.project_name, self.network_name)
-            if str(id) in os.listdir(base_dir):
-                results_dir = os.path.join(base_dir, str(id), 'results')
+            if str(_id) in os.listdir(base_dir):
+                results_dir = os.path.join(base_dir, str(_id), 'results')
                 list_img = os.listdir(results_dir)
                 assert len(list_img) != 0, 'No example have been created'
             else:
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT),
-                                        os.path.join(base_dir, str(id) + '/results'))
+                raise FileNotFoundError(os.path.join(base_dir, str(_id) + '/results'))
 
-        elif (id is None and example_path_list is not None) or (id is not None and example_path_list is not None):
+        elif (_id is None and example_path_list is not None) or (_id is not None and example_path_list is not None):
             for file in example_path_list:
                 if not os.path.isfile(file):
                     raise FileNotFoundError("file not found @ %s" % file)
@@ -824,15 +853,15 @@ class Client:
             results_dir = ""
 
         object_name_list = []
-        for img_path in list_img:
+        for img_path in list_img[:5]:
             file_path = os.path.join(results_dir, img_path)
             if not os.path.isfile(file_path):
                 raise FileNotFoundError("Can't locate file @ %s" % (file_path))
-            if id is None and example_path_list is not None:
+            if _id is None and example_path_list is not None:
                 OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(self.training_id), "results",
                                            file_path.split('/')[-1])
-            elif id is not None and example_path_list is not None:
-                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(id), "results",
+            elif _id is not None and example_path_list is not None:
+                OBJECT_NAME = os.path.join(self.project_id, self.network_id, str(_id), "results",
                                            file_path.split('/')[-1])
             else:
                 OBJECT_NAME = file_path
@@ -857,7 +886,7 @@ class Client:
             if r.status_code != 201:
                 print(r.text)
                 raise ValueError("Errors.")
-            print("A snapshot of results has been saved to the platform")
+            print("Your images have been uploaded to the platform")
         except:
             raise NetworkError("Could not upload to Picsell.ia Backend")
 
@@ -928,7 +957,7 @@ class Client:
         parts = self._upload_part(file_path)
 
         if self._complete_part_upload(parts, self.OBJECT_NAME, 'model'):
-            print("Your exported model have been uploaded successfully to our cloud.")
+            print("Your exported model has been successfully uploaded to the platform.")
 
     def send_checkpoints(self, index_path=None, data_path=None, config_path=None):
 
@@ -955,10 +984,6 @@ class Client:
                 raise FileNotFoundError("{}: no such file".format(data_path))
             if not os.path.isfile(config_path):
                 raise FileNotFoundError("{}: no such file".format(config_path))
-
-            # index_name = index_path.split('/')[-1]
-            # data_path = data_path.split('/')[-1]
-            # config_path = config_path.split('/')[-1]
 
             ckpt_index_object = os.path.join(self.checkpoint_dir, index_path.split('/')[-1])
             ckpt_data_object = os.path.join(self.checkpoint_dir, data_path.split('/')[-1])
@@ -1004,7 +1029,7 @@ class Client:
         parts = self._upload_part(data_path)
 
         if self._complete_part_upload(parts, ckpt_data_object, 'checkpoint'):
-            print("Your index checkpoint have been uploaded successfully to our cloud.")
+            print("Your checkpoint has been successfully uploaded to the platform.")
 
     def send_checkpoint_index(self, filename, object_name):
         response = self._get_presigned_url(method='post', object_name=object_name,
@@ -1040,6 +1065,19 @@ class Client:
                     raise ValueError("Errors.")
         except:
             raise NetworkError("Could not upload config to s3")
+    
+    def send_everything(self, training_logs=None, metrics=None):
+        '''Wrapper function to send data from the training'''
+        #Mettre des try except ou des checks ?
+        if logs:
+            send_logs(training_logs)
+        if metrics:
+            send_metrics(metrics)
+        
+        send_results()
+        send_model()
+        send_checkpoints()
+
 
     def get_dataset_list(self):
         r = requests.get(self.host + 'get_dataset_list', headers=self.auth)
@@ -1623,14 +1661,3 @@ class Client:
 
                 yield (width, height, filename, encoded_jpg, image_format,
                     classes_text, classes)
-
-
-if __name__ == '__main__':
-    print("Trying to create a new model ")
-    client = Client(api_token="57c60ade109be36ef1a1c89f56247109fa448741")
-    client.checkout_project(project_token="4b003477-3b31-4f74-8952-8a9dc879b0ec")
-    client.dl_annotations()
-    client.dl_pictures()
-    #client.checkout_network('test_up')
-    #client.dl_annotations()
-    #client.dl_pictures(prop=0.5)
