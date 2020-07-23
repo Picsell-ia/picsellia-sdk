@@ -12,21 +12,6 @@ from multiprocessing.pool import ThreadPool
 import time
 import zipfile
 
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
-os.system('color')
-
-
 class Client:
     """
     The Picsell.ia Client is used to connect to the Picsell.ia platform.
@@ -56,7 +41,7 @@ class Client:
         self.username = r.json()["username"]
         self.supported_img_types = ("png", "jpg", "jpeg", "JPG", "JPEG", "PNG")
         self.label_path = ""
-        print(f"Welcome {bcolors.OKBLUE}{self.username}{bcolors.ENDC}, glad to have you back")
+        print(f"Welcome {self.username}, glad to have you back")
 
     def checkout_project(self, project_token, png_dir=None):
         """ Attach the Picsell.ia Client to the desired project.
@@ -563,17 +548,14 @@ class Client:
         if "images" not in self.dict_annotations.keys():
             raise exceptions.ResourceNotFoundError("Please run dl_annotations function first")
 
-        def pool_init():
+        def pool_init(t):
             global cnt
             global dl
             global total_length
             global should_log
             cnt = 0
             dl = 0
-            lst = []
-            for info in self.dict_annotations["images"]:
-                lst.append(info["external_picture_url"])
-            total_length = len(set(lst))
+            total_length = t
             should_log = True
 
         def _dl_list(infos):
@@ -620,9 +602,13 @@ class Client:
         if not os.path.isdir(self.png_dir):
             os.makedirs(self.png_dir)
 
+        lst = []
+        for info in self.dict_annotations["images"]:
+            lst.append(info["external_picture_url"])
+        t = len(set(lst))
         nb_threads = 12
         infos_split = list(chunks(self.dict_annotations["images"], nb_threads))
-        p = ThreadPool(nb_threads, initializer=pool_init, initargs=())
+        p = ThreadPool(nb_threads, initializer=pool_init(t), initargs=())
         p.map(_dl_list, infos_split)
         print(f"\n{cnt} images have been downloaded")
 
