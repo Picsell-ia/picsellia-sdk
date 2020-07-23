@@ -459,7 +459,7 @@ class Client:
             print()
         return path_to_origin
 
-    def dl_annotations(self, option=""):
+    def dl_annotations(self, option="all"):
         """ Download all the annotations made on Picsell.ia Platform for your project.
             Called when checking out a network
             Args:
