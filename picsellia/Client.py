@@ -36,7 +36,7 @@ class Client:
         try:
             r = requests.get(self.host + 'ping', headers=self.auth)
         except Exception:
-            raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+            raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")            
         self.project_name_list = r.json()["project_list"]
         self.username = r.json()["username"]
         self.supported_img_types = ("png", "jpg", "jpeg", "JPG", "JPEG", "PNG")
@@ -142,7 +142,7 @@ class Client:
 
         print("New network has been created")
 
-    def checkout_network(self, network_name, training_id=None):
+    def checkout_network(self, network_name, training_id=None, prop=0.8):
         """ Attach the Picsell.ia Client to the desired Network.
             If the model name exists on the server for this project, you will create a new version of your training.
 
@@ -218,6 +218,7 @@ class Client:
                 self.dict_annotations = json.load(f)
         self.generate_labelmap()
         self.send_labelmap()
+        self.dl_train_test_split(prop=prop)
         return self.model_selected
 
     def configure_network(self, project_type):
@@ -459,6 +460,35 @@ class Client:
             print()
         return path_to_origin
 
+    def dl_train_test_split(self, prop):
+        ''' Download, if it exists, the train_test_split for this training.'''
+        to_send = {"project_token": self.project_token, "network_id": self.network_id, "training_id": self.training_id}
+        if not self.dict_annotations:
+            raise exceptions.ResourceNotFoundError("Dict annotations not found")
+        try:
+            r = requests.get(self.host + "get_repartition", data=json.dumps(to_send), headers=self.auth)
+        except Exception:
+            raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+        if r.status_code != 400:
+            data = r.json()
+            self.train_list_id = data["train"]
+            self.eval_list_id = data["test"]
+            self.train_list = []
+            self.eval_list = []
+            for info in self.dict_annotations["images"]:
+                pic_name = os.path.join(self.png_dir, info['external_picture_url'])
+                if info["internal_picture_id"] in self.eval_list_id:
+                    self.eval_list.append(pic_name)
+                elif info["internal_picture_id"] in self.train_list_id:
+                    self.train_list.append(pic_name)
+            print("Datasplit retrieved from the platform")
+        else:
+            if r.text == "Could not find datasplit":
+                print(f"{r.text} for the training_id {self.training_id}, splitting the dataset now with a {prop} proportion")
+                self.train_test_split(prop=prop)
+            else:
+                raise exceptions.NetworkError(r.text)
+
     def dl_annotations(self, option="all"):
         """ Download all the annotations made on Picsell.ia Platform for your project.
             Called when checking out a network
@@ -475,17 +505,16 @@ class Client:
         try:
             to_send = {"project_token": self.project_token, "type": option}
             r = requests.get(self.host + 'annotations', data=json.dumps(to_send), headers=self.auth)
-
-            if r.status_code != 200:
-                return exceptions.ResourceNotFoundError("No annotations were found for this project")
-
-            self.dict_annotations = r.json()
-
-            if len(self.dict_annotations.keys()) == 0:
-                raise exceptions.ResourceNotFoundError("You don't have any annotations")
-
         except Exception:
             raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
+        if r.status_code != 200:
+            raise exceptions.ResourceNotFoundError("No annotations were found for this project")
+
+        self.dict_annotations = r.json()
+
+        if len(self.dict_annotations.keys()) == 0:
+            raise exceptions.ResourceNotFoundError("You don't have any annotations")
+
 
     def dl_latest_saved_model(self, path_to_save=None):
         """ Pull the latest  Picsell.ia Platform for your project.
@@ -752,7 +781,7 @@ class Client:
             results_dir = ""
 
         object_name_list = []
-        for img_path in list_img[:5]:
+        for img_path in list_img[:4]:
             file_path = os.path.join(results_dir, img_path)
             if not os.path.isfile(file_path):
                 raise FileNotFoundError(f"Can't locate file @ {file_path}")
