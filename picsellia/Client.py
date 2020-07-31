@@ -471,8 +471,8 @@ class Client:
             raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
         if r.status_code != 400:
             data = r.json()
-            self.train_list_id = data["train"]
-            self.eval_list_id = data["test"]
+            self.train_list_id = data["train"]["train_list_id"]
+            self.eval_list_id = data["test"]["eval_list_id"]
             self.train_list = []
             self.eval_list = []
             for info in self.dict_annotations["images"]:

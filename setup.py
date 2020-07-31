@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
     name='picsellia',
     packages=['picsellia'],
-    version='4.4',
+    version='4.6',
 
     license='MIT',
     description='Python SDK to make your code Picsell.ia compatible !',
