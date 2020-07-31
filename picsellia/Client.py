@@ -466,7 +466,7 @@ class Client:
         if not self.dict_annotations:
             raise exceptions.ResourceNotFoundError("Dict annotations not found")
         try:
-            r = requests.get(self.host + "get_repartition", data=json.dumps(to_send), headers=self.auth)
+            r = requests.post(self.host + "get_repartition", data=json.dumps(to_send), headers=self.auth)
         except Exception:
             raise exceptions.NetworkError("Server is not responding, please check your host or Picsell.ia server status on twitter")
         if r.status_code != 400:
